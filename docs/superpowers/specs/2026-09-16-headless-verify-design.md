@@ -1,7 +1,7 @@
 # headless-verify: design
 
 Date: 2026-09-16
-Status: approved design, awaiting spec review
+Status: approved, including keeping the benchmark in the repo permanently
 
 ## Problem
 
