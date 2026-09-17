@@ -1,3 +1,7 @@
+// Tool inputs that mention benchmark internals: the answer key, the fixture
+// source, the spec or the fixture tests. A run that touches these is suspect.
+const LEAK_NEEDLES = ['variants.mjs', '/bench/', 'fixture-app', 'docs/superpowers', 'test/fixture-app'];
+
 export function parseStream(text) {
   const out = {
     finalText: '',
@@ -8,6 +12,7 @@ export function parseStream(text) {
     screenshots: 0,
     isError: true,
     subtype: 'no_result',
+    leakSuspect: false,
   };
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
@@ -17,7 +22,13 @@ export function parseStream(text) {
     } catch {
       continue;
     }
-    if (event.type === 'user') {
+    if (event.type === 'assistant') {
+      for (const block of event.message?.content ?? []) {
+        if (block.type !== 'tool_use') continue;
+        const input = JSON.stringify(block.input ?? {});
+        if (LEAK_NEEDLES.some((needle) => input.includes(needle))) out.leakSuspect = true;
+      }
+    } else if (event.type === 'user') {
       for (const block of event.message?.content ?? []) {
         if (block.type !== 'tool_result' || !Array.isArray(block.content)) continue;
         out.screenshots += block.content.filter((c) => c.type === 'image').length;

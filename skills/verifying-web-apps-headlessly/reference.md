@@ -17,12 +17,13 @@ import { verify } from '/ABSOLUTE/PATH/TO/headless-verify/scripts/verify.mjs';
 
 await verify('http://localhost:5173', async (page, check) => {
   await page.evaluate(() => new Promise((resolve) => {
-    const v = document.getElementById('clip');
+    const v = document.querySelector('video');
     v.muted = true;
-    const go = () => { v.currentTime = 3.5; v.addEventListener('seeked', () => resolve(), { once: true }); };
+    const go = () => { v.currentTime = 7.25; v.addEventListener('seeked', () => resolve(), { once: true }); };
     v.readyState >= 1 ? go() : v.addEventListener('loadedmetadata', go, { once: true });
   }));
-  await check('word 3 active', async () => (await page.getAttribute('#captions [data-start="3"]', 'class'))?.includes('active'));
+  await check('cue at 7s highlighted', async () =>
+    (await page.getAttribute('.transcript [data-time="7"]', 'class'))?.includes('current'));
 });
 ```
 
@@ -33,9 +34,9 @@ await verify('http://localhost:5173', async (page, check) => {
 import { verify } from '/ABSOLUTE/PATH/TO/headless-verify/scripts/verify.mjs';
 
 await verify('http://localhost:5173', async (page, check) => {
-  const box = await page.locator('#track').boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await check('preview shows 0:30', async () => (await page.textContent('#preview')) === '0:30');
+  const box = await page.locator('.timeline').boundingBox();
+  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height / 2);
+  await check('tooltip shows 1:15', async () => (await page.textContent('.timeline-tooltip'))?.trim() === '1:15');
 });
 ```
 
@@ -46,9 +47,9 @@ await verify('http://localhost:5173', async (page, check) => {
 import { verify } from '/ABSOLUTE/PATH/TO/headless-verify/scripts/verify.mjs';
 
 await verify('http://localhost:5173', async (page, check) => {
-  await page.fill('#email', 'a@example.com');
-  await page.click('#submit');
-  await check('form saved', async () => (await page.textContent('#form-status')) === 'Saved');
+  await page.fill('input[type=email]', 'someone@example.com');
+  await page.getByRole('button', { name: 'Subscribe' }).click();
+  await check('confirmation shown', async () => (await page.textContent('[role=status]'))?.includes('Thanks'));
 });
 
 // verify() already prints any console.error / pageerror lines it saw while
@@ -62,10 +63,10 @@ await verify('http://localhost:5173', async (page, check) => {
 import { verify } from '/ABSOLUTE/PATH/TO/headless-verify/scripts/verify.mjs';
 
 await verify('http://localhost:5173', async (page, check) => {
-  await check('label inside toolbar', async () => {
-    const bar = await page.locator('#toolbar').boundingBox();
-    const label = await page.locator('#show-cuts').boundingBox();
-    return label.x + label.width <= bar.x + bar.width + 0.5;
+  await check('toggle inside toolbar', async () => {
+    const bar = await page.locator('.toolbar').boundingBox();
+    const toggle = await page.locator('.toolbar .toggle').boundingBox();
+    return toggle.x + toggle.width <= bar.x + bar.width + 0.5 && toggle.y + toggle.height <= bar.y + bar.height + 0.5;
   });
 });
 ```
