@@ -11,7 +11,7 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { armArgs } from './arms.mjs';
 import { PREFLIGHT_BUDGET_USD, preflightConsent, resultsFileName, runProcess, runRecord } from './runner.mjs';
-import { estimateResumeCost, itemsToRun, mergeRecords, resumeConsent } from './resume.mjs';
+import { estimateResumeCost, itemsToRun, mergeRecords, resolveResumeSettings, resumeConsent } from './resume.mjs';
 import { schedule } from './schedule.mjs';
 import { startFixture } from './server.mjs';
 import { stagePlugin } from './stage.mjs';
@@ -23,13 +23,20 @@ const flag = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : fallback;
 };
+// Whether `--name` was actually typed on the command line, as opposed to
+// falling back to its default. Used on --resume, where an explicit flag that
+// conflicts with the results file's own settings must be refused rather than
+// silently mixed in (see resolveResumeSettings).
+const wasPassed = (name) => process.argv.includes(`--${name}`);
+
 const resumeFile = flag('resume', undefined);
 const runs = Number(flag('runs', '5'));
 const tasks = flag('tasks', TASK_IDS.join(',')).split(',');
 const model = flag('model', 'claude-opus-5');
 const budgetUsd = Number(flag('budget', '2'));
 const seed = Number(flag('seed', String(Date.now() % 100000)));
-const timeoutMs = Number(flag('timeout-min', '10')) * 60_000;
+const timeoutMinFlag = Number(flag('timeout-min', '10'));
+const timeoutMs = timeoutMinFlag * 60_000;
 const yes = process.argv.includes('--yes');
 
 function claudeVersion() {
@@ -41,13 +48,17 @@ function claudeVersion() {
   }
 }
 
-// Every claude run is killed after --timeout-min minutes (default 10).
-const runClaude = (args, prompt, cwd) => runProcess('claude', [...args, prompt], { cwd, timeoutMs });
+const runClaude = (args, prompt, cwd, runTimeoutMs) => runProcess('claude', [...args, prompt], { cwd, timeoutMs: runTimeoutMs });
 
-async function once(item, fixture, cwd, pluginDir) {
+async function once(item, fixture, cwd, pluginDir, settings) {
   const url = fixture.urlFor(item.variant);
   const prompt = await loadPrompt(item.task, url);
-  const result = await runClaude(armArgs(item.arm, { model, budgetUsd, pluginDir }), prompt, cwd);
+  const result = await runClaude(
+    armArgs(item.arm, { model: settings.model, budgetUsd: settings.budgetUsd, pluginDir }),
+    prompt,
+    cwd,
+    settings.timeoutMs,
+  );
   return runRecord(item, result);
 }
 
@@ -68,10 +79,10 @@ function resultsPath(now) {
 // rate_limited: burning the remaining schedule into more blocked runs just
 // wastes the wait for the limit to reset. Returns the records collected so
 // far and whether the run was cut short this way.
-async function runItems(items, fixture, work, pluginDir, { label, total, offset = 0 }) {
+async function runItems(items, fixture, work, pluginDir, settings, { label, total, offset = 0 }) {
   const records = [];
   for (const [i, item] of items.entries()) {
-    const record = await once(item, fixture, work, pluginDir);
+    const record = await once(item, fixture, work, pluginDir, settings);
     records.push(record);
     const n = offset + i + 1;
     console.log(
@@ -85,11 +96,12 @@ async function runItems(items, fixture, work, pluginDir, { label, total, offset 
   return { records, stoppedEarly: false };
 }
 
-async function preflight(fixture, work, pluginDir) {
+async function preflight(work, pluginDir, settings) {
   const { stdout: preflightOut } = await runClaude(
-    armArgs('browser', { model, budgetUsd: PREFLIGHT_BUDGET_USD, pluginDir }),
+    armArgs('browser', { model: settings.model, budgetUsd: PREFLIGHT_BUDGET_USD, pluginDir }),
     'List the names of your tools that start with mcp__claude-in-chrome, then stop.',
     work,
+    settings.timeoutMs,
   );
   const probe = parseStream(preflightOut);
   if (!/mcp__claude-in-chrome/.test(probe.finalText)) {
@@ -104,6 +116,24 @@ async function runResume(fixture, work, pluginDir) {
   const path = resumeFile;
   const { meta, records } = JSON.parse(await readFile(path, 'utf8'));
   const resumeTasks = meta.tasks ?? TASK_IDS;
+
+  // Refuse a conflicting explicit flag instead of silently mixing settings;
+  // an override that matches the file's own value is accepted as a no-op.
+  const overrides = {
+    model: wasPassed('model') ? model : undefined,
+    budgetUsd: wasPassed('budget') ? budgetUsd : undefined,
+    timeoutMin: wasPassed('timeout-min') ? timeoutMinFlag : undefined,
+  };
+  let settingsMeta;
+  try {
+    settingsMeta = resolveResumeSettings(meta, overrides);
+  } catch (err) {
+    console.error(err.message);
+    process.exitCode = 2;
+    return;
+  }
+  const settings = { model: settingsMeta.model, budgetUsd: settingsMeta.budgetUsd, timeoutMs: settingsMeta.timeoutMin * 60_000 };
+
   const plan = schedule({ tasks: resumeTasks, runs: meta.runs, seed: meta.seed });
   const toRun = itemsToRun(plan, records);
 
@@ -112,8 +142,13 @@ async function runResume(fixture, work, pluginDir) {
     return;
   }
 
+  const estimate = estimateResumeCost(records, toRun.length);
+  console.log(`${toRun.length} of ${plan.length} runs still need to run; estimated cost ≈ $${estimate.toFixed(2)} (budget cap $${settings.budgetUsd}/run)`);
+
   if (!yes) {
-    const proceed = await confirm(preflightConsent(meta.budgetUsd ?? budgetUsd));
+    const proceed = await confirm(
+      resumeConsent({ itemsCount: toRun.length, budgetUsd: settings.budgetUsd, preflightBudgetUsd: PREFLIGHT_BUDGET_USD, estimateUsd: estimate }),
+    );
     if (!proceed) {
       process.exitCode = 0;
       return;
@@ -122,21 +157,10 @@ async function runResume(fixture, work, pluginDir) {
 
   // Resume skips calibration entirely (this file already has real cost data
   // to estimate from); the preflight availability probe still runs.
-  const ok = await preflight(fixture, work, pluginDir);
+  const ok = await preflight(work, pluginDir, settings);
   if (!ok) return;
 
-  const estimate = estimateResumeCost(records, toRun.length);
-  console.log(`${toRun.length} of ${plan.length} runs still need to run; estimated cost ≈ $${estimate.toFixed(2)} (budget cap $${meta.budgetUsd ?? budgetUsd}/run)`);
-
-  if (!yes) {
-    const proceed = await confirm(resumeConsent(estimate, toRun.length));
-    if (!proceed) {
-      process.exitCode = 0;
-      return;
-    }
-  }
-
-  const { records: fresh, stoppedEarly } = await runItems(toRun, fixture, work, pluginDir, {
+  const { records: fresh, stoppedEarly } = await runItems(toRun, fixture, work, pluginDir, settings, {
     label: 'resume',
     total: toRun.length,
   });
@@ -151,8 +175,9 @@ async function runResume(fixture, work, pluginDir) {
   }
 }
 
-async function runFresh(fixture, work, pluginDir) {
-  const version = claudeVersion();
+async function runFresh(fixture, work, pluginDir, version) {
+  const settings = { model, budgetUsd, timeoutMs };
+
   if (!yes) {
     const proceed = await confirm(preflightConsent(budgetUsd));
     if (!proceed) {
@@ -161,14 +186,14 @@ async function runFresh(fixture, work, pluginDir) {
     }
   }
 
-  const ok = await preflight(fixture, work, pluginDir);
+  const ok = await preflight(work, pluginDir, settings);
   if (!ok) return;
 
   const plan = schedule({ tasks, runs, seed });
   const calibrationItem = plan.find((p) => p.arm === 'browser');
   const calibrationHItem = plan.find((p) => p.arm === 'headless');
-  const calibration = await once(calibrationItem, fixture, work, pluginDir);
-  const calibrationH = await once(calibrationHItem, fixture, work, pluginDir);
+  const calibration = await once(calibrationItem, fixture, work, pluginDir, settings);
+  const calibrationH = await once(calibrationHItem, fixture, work, pluginDir, settings);
   console.log(`[calibration] ${calibrationItem.task} browser ${calibrationItem.variant}: ${calibration.correct ? 'correct' : 'wrong'} · $${calibration.costUsd.toFixed(3)}`);
   console.log(`[calibration] ${calibrationHItem.task} headless ${calibrationHItem.variant}: ${calibrationH.correct ? 'correct' : 'wrong'} · $${calibrationH.costUsd.toFixed(3)}`);
   const records = [calibration, calibrationH];
@@ -208,7 +233,7 @@ async function runFresh(fixture, work, pluginDir) {
   }
 
   const remainingItems = plan.filter((item) => item !== calibrationItem && item !== calibrationHItem);
-  const { records: rest, stoppedEarly } = await runItems(remainingItems, fixture, work, pluginDir, {
+  const { records: rest, stoppedEarly } = await runItems(remainingItems, fixture, work, pluginDir, settings, {
     label: 'run',
     total: plan.length,
     offset: 2,
@@ -224,7 +249,7 @@ async function runFresh(fixture, work, pluginDir) {
 }
 
 async function main() {
-  claudeVersion(); // fails fast (exit 2) if `claude` isn't on PATH, for both fresh and resume runs.
+  const version = claudeVersion(); // fails fast (exit 2) if `claude` isn't on PATH, for both fresh and resume runs.
   const fixture = await startFixture();
   const work = await mkdtemp(join(tmpdir(), 'hv-work-'));
   // The headless arm gets a plugin-only copy, never the repo root: the repo holds
@@ -236,7 +261,7 @@ async function main() {
     if (resumeFile) {
       await runResume(fixture, work, pluginDir);
     } else {
-      await runFresh(fixture, work, pluginDir);
+      await runFresh(fixture, work, pluginDir, version);
     }
   } finally {
     await fixture.close();

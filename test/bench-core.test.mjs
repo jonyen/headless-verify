@@ -116,6 +116,29 @@ test('parseStream does NOT classify a normal successful answer that merely menti
   assert.equal(r.isError, false);
 });
 
+test('parseStream does NOT classify a normal successful answer that starts by discussing "rate limiting" (rule 1 requires isError or zero cost)', () => {
+  const r = parseStream(resultEvent({
+    subtype: 'success',
+    is_error: false,
+    result: 'Rate limiting is a common technique for protecting APIs from abuse. {"works": true, "cause": "ok"}',
+    total_cost_usd: 0.15,
+    num_turns: 5,
+  }));
+  assert.notEqual(r.subtype, 'rate_limited');
+  assert.equal(r.isError, false);
+});
+
+test('parseStream DOES classify a real limit message even though it starts the text (isError true)', () => {
+  const r = parseStream(resultEvent({
+    subtype: 'success',
+    is_error: true,
+    result: "You've hit your session limit · resets 11:30pm (America/New_York)",
+    total_cost_usd: 0,
+    num_turns: 1,
+  }));
+  assert.equal(r.subtype, 'rate_limited');
+});
+
 test('parseStream does NOT classify a real error with real cost/turns that mentions a limit phrase mid-text', () => {
   const r = parseStream(resultEvent({
     subtype: 'error_during_execution',

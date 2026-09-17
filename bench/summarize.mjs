@@ -1,6 +1,6 @@
 import { basename, relative, resolve, sep } from 'node:path';
 import { iqr, median, savedPct } from './stats.mjs';
-import { isRateLimited } from './stream.mjs';
+import { wasRateLimited } from './stream.mjs';
 
 const totalTokens = (r) => r.usage.input + r.usage.output + r.usage.cacheCreation + r.usage.cacheRead;
 
@@ -8,11 +8,6 @@ const totalTokens = (r) => r.usage.input + r.usage.output + r.usage.cacheCreatio
 // per-run timeout) carry no meaningful usage: they count in n, failures and
 // accuracy, but not in the token/cost/duration medians.
 const NO_USAGE = new Set(['no_result', 'timeout']);
-
-// Records written by a fixed run.mjs already carry subtype 'rate_limited'.
-// Results files written before that fix don't, so fall back to re-deriving
-// it from the record's own finalText/isError/costUsd/turns.
-const wasRateLimited = (r) => r.subtype === 'rate_limited' || isRateLimited(r.finalText, { isError: r.isError, costUsd: r.costUsd, turns: r.turns });
 
 // Runs blocked by the account's usage/rate limit are infrastructure failures,
 // not model failures: they never ran the task at all. They're excluded from

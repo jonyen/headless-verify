@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateResumeCost, itemsToRun, mergeRecords, resumeConsent } from '../bench/resume.mjs';
+import { estimateResumeCost, itemsToRun, mergeRecords, resolveResumeSettings, resumeConsent } from '../bench/resume.mjs';
 
 const item = (task, arm, variant, run) => ({ task, arm, variant, run });
 const record = (task, arm, variant, run, subtype, extra = {}) => ({ task, arm, variant, run, subtype, costUsd: 0.1, ...extra });
@@ -27,6 +27,18 @@ test('itemsToRun includes rate_limited, no_result and timeout records but not su
   ];
   const toRun = itemsToRun(plan, records);
   assert.deepEqual(toRun, plan.slice(0, 3));
+});
+
+test('itemsToRun includes a legacy record never tagged rate_limited (subtype success, isError zero-cost one-turn limit text)', () => {
+  const plan = [item('preview', 'browser', 'bug', 3), item('preview', 'headless', 'bug', 3)];
+  const legacy = {
+    task: 'preview', arm: 'browser', variant: 'bug', run: 3,
+    subtype: 'success', isError: true, costUsd: 0, turns: 1,
+    finalText: "You've hit your session limit · resets 11:30pm (America/New_York)",
+  };
+  const records = [legacy, record('preview', 'headless', 'bug', 3, 'success')];
+  const toRun = itemsToRun(plan, records);
+  assert.deepEqual(toRun, [item('preview', 'browser', 'bug', 3)]);
 });
 
 test('itemsToRun preserves plan order', () => {
@@ -79,9 +91,38 @@ test('estimateResumeCost ignores zero-cost (rate-limited) records and returns 0 
   assert.equal(estimateResumeCost(records, 3), 0);
 });
 
-test('resumeConsent names the item count and the estimate', () => {
-  const msg = resumeConsent(1.23, 4);
-  assert.match(msg, /4 blocked runs/);
-  assert.match(msg, /\$1\.23/);
-  assert.match(resumeConsent(0.5, 1), /1 blocked run\b/);
+test('resumeConsent describes the preflight cap and per-run cap, not calibration', () => {
+  const msg = resumeConsent({ itemsCount: 4, budgetUsd: 2, preflightBudgetUsd: 0.5, estimateUsd: 0.8 });
+  assert.match(msg, /\$0\.50/); // preflight cap
+  assert.match(msg, /4/);
+  assert.match(msg, /\$2\.00 each/);
+  assert.match(msg, /\$0\.80/); // estimate from existing median cost
+  assert.doesNotMatch(msg, /calibration/i);
+});
+
+test('resumeConsent pluralizes a single run correctly', () => {
+  const msg = resumeConsent({ itemsCount: 1, budgetUsd: 2, preflightBudgetUsd: 0.5, estimateUsd: 2 });
+  assert.match(msg, /1 blocked run\b/);
+});
+
+const meta = { model: 'claude-opus-5', budgetUsd: 2, timeoutMin: 10 };
+
+test('resolveResumeSettings uses the results file settings when nothing is overridden', () => {
+  assert.deepEqual(resolveResumeSettings(meta, {}), { model: 'claude-opus-5', budgetUsd: 2, timeoutMin: 10 });
+});
+
+test('resolveResumeSettings accepts an override that matches the file', () => {
+  assert.deepEqual(resolveResumeSettings(meta, { model: 'claude-opus-5' }), { model: 'claude-opus-5', budgetUsd: 2, timeoutMin: 10 });
+});
+
+test('resolveResumeSettings refuses a conflicting --model override', () => {
+  assert.throws(() => resolveResumeSettings(meta, { model: 'claude-sonnet-5' }), /--model claude-sonnet-5.*claude-opus-5|claude-opus-5.*claude-sonnet-5/s);
+});
+
+test('resolveResumeSettings refuses a conflicting --budget override', () => {
+  assert.throws(() => resolveResumeSettings(meta, { budgetUsd: 5 }), /--budget|budget/i);
+});
+
+test('resolveResumeSettings refuses a conflicting --timeout-min override', () => {
+  assert.throws(() => resolveResumeSettings(meta, { timeoutMin: 3 }), /--timeout-min|timeout/i);
 });

@@ -8,19 +8,30 @@ const LEAK_NEEDLES = ['variants.mjs', '/bench/', 'fixture-app', 'docs/superpower
 const RATE_LIMIT_PHRASES = ["hit your session limit", "you've hit your session limit", 'usage limit', 'rate limit', 'limit · resets'];
 
 // A run is rate_limited when either:
-//   1. the final text STARTS WITH one of the phrases (the normal shape of a
-//      limit message, e.g. "You've hit your session limit · resets ..."), or
+//   1. the final text STARTS WITH one of the phrases AND the run shows some
+//      sign of not having really completed (isError, or zero cost), or
 //   2. the result is an error with zero cost and exactly one turn (the
 //      signature of a run that never actually executed) AND a phrase appears
 //      anywhere in the final text.
-// Rule 1 alone would also match a genuine answer that merely discusses
-// "rate limit" in the middle of its prose, so that case only counts under
-// rule 2, which requires the zero-cost/one-turn signature too.
+// Rule 1 alone (with no isError/cost check) would also match a genuine,
+// successful answer that happens to start by discussing "rate limiting" in
+// prose (e.g. "Rate limiting is a common technique..."), so it additionally
+// requires isError or zero cost. A genuine answer that merely mentions a
+// phrase mid-text, with real cost/turns and no error, matches neither rule.
 export function isRateLimited(finalText, { isError, costUsd, turns }) {
   const t = (finalText || '').trim().toLowerCase();
-  const startsWithPhrase = RATE_LIMIT_PHRASES.some((p) => t.startsWith(p));
+  const startsWithPhrase = (isError || costUsd === 0) && RATE_LIMIT_PHRASES.some((p) => t.startsWith(p));
   const looksLikeBlockedRun = isError && costUsd === 0 && turns === 1 && RATE_LIMIT_PHRASES.some((p) => t.includes(p));
   return startsWithPhrase || looksLikeBlockedRun;
+}
+
+// Shared classification for a full run record (fresh from parseStream, or an
+// older one loaded from a results file written before this fix, which never
+// got tagged subtype: 'rate_limited'). Used by both summarize.mjs (to keep
+// legacy results files out of the medians/accuracy) and resume.mjs (to decide
+// which legacy records still need to be re-run).
+export function wasRateLimited(record) {
+  return record.subtype === 'rate_limited' || isRateLimited(record.finalText, { isError: record.isError, costUsd: record.costUsd, turns: record.turns });
 }
 
 export function parseStream(text) {
