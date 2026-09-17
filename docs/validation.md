@@ -1,6 +1,111 @@
 # Validation against the spec's success criteria
 
-## Update 2026-09-17: per-turn criterion and compaction exclusion
+## Update 2026-09-17 (2): attachments and compaction markers
+
+This is the last change to the analyzer's model. Tuning stops here whatever the result.
+
+### Entry types the parser skipped
+
+Counted across sessions since 2026-09-01 (entry counts, no content). Types sent to the model:
+`attachment` (9,432 entries). The other types are local session metadata and are not part of the
+request: `queue-operation` 1,526, `last-prompt` 1,615, `bridge-session` 1,336, `atis-latch` 1,605,
+`mode` 1,503, `permission-mode` 1,501, `ai-title` 1,471, `system` 1,227, `file-history-snapshot`
+681, `custom-title` 301, `agent-name` 293, `file-history-delta` 133, `pr-link` 79, `cost-state` 70,
+`relocated` 2. User entries were already counted.
+
+### What changed
+
+- **Attachments:** each `attachment` entry adds characters to the context bucket (as
+  `context:attachment`) for the turn it arrives before, just as `context:user` does. 3,195 entries
+  carry a `rendered` list, the model-facing text, and that text is what gets counted. Older entries
+  have no `rendered` form. For those, if the attachment type appears with a `rendered` form
+  elsewhere, its string fields are counted minus metadata fields (names, ids, commands, raw
+  stdout/stderr). Types never seen with a rendered form (for example `prompt_snapshot`, a copy of
+  the system prompt) are not counted.
+- **Compaction markers:** a `system` entry with subtype `compact_boundary` or a user entry with
+  `isCompactSummary` marks a compaction. Only the turn whose growth spans the compaction is
+  excluded, counted as *compact marker* when usage shows no drop.
+- **Turn after a usage drop:** excluded only if its growth is negative or more than 5× the
+  session's median growth. Otherwise it is kept.
+
+### Originating session
+
+```
+node analyze/session-cost.mjs ~/.claude/projects/<project>/<session>.jsonl
+```
+
+| | before (update above) | now |
+| --- | --- | --- |
+| tool-result chars/token | 2.34 | 2.41 |
+| other context chars/token | 2.65 | 2.71 |
+| **median per-turn holdout error (criterion)** | 25.0% | **10.1%** |
+| summed holdout error (secondary) | 22.0% | 5.3% |
+| observations | 285 | 290 |
+| excluded: drop / marker / after / growth ≤ 0 | 1 / – / 1 / 0 | 1 / 0 / 1 / 0 |
+| attachment chars added | – | 133,059 |
+
+**The 15% criterion (median per-turn holdout error, originating session) is met: 10.1%.**
+
+### All sessions since 2026-09-01
+
+```
+node analyze/session-cost.mjs --all --since 2026-09-01
+```
+
+43 sessions: 25 fitted, 18 fixed, all fixed ones for fewer than 20 usable observations
+(10, 3, 14, 5, 18, 0, 3, 19, 15, 0, 0, 5, 7, 6, 13, 0, 0, 19). 5,881 observations. Excluded: 18 context drop, 2 compact marker, 11 after drop, 12 with
+growth ≤ 0. The 3 in-range compact markers include 1 that also shows a usage drop. Attachments
+added 1,980,994 characters.
+
+| # | tool c/t | context c/t | median per-turn | summed | obs | drop / marker / after / ≤ 0 | attachment chars |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2.58 | 2.79 | 12.9% | 4.3% | 146 | 0 / 0 / 0 / 0 | 55,584 |
+| 2 | 1.78 | 2.65 | 13.5% | 5.9% | 145 | 1 / 0 / 1 / 0 | 50,522 |
+| 3 | 2.42 | 2.40 | 18.2% | 12.1% | 537 | 1 / 0 / 1 / 1 | 161,052 |
+| 4 | 2.26 | 0.69 | 16.9% | 2.9% | 70 | 0 / 0 / 0 / 0 | 3,706 |
+| 5 | 3.06 | 0.44 | 37.3% | 6.2% | 91 | 0 / 0 / 0 / 0 | 4,824 |
+| 6 | 2.78 | 2.56 | 18.4% | 22.1% | 99 | 1 / 0 / 0 / 5 | 31,598 |
+| 7 | 2.05 | 2.77 | 13.9% | 5.0% | 30 | 0 / 0 / 0 / 0 | 5,062 |
+| 8 | 2.40 | 249.85 | 36.4% | 624.5% | 37 | 0 / 0 / 0 / 0 | 265,045 |
+| 9 | 2.16 | 0.98 | 42.2% | 5.0% | 52 | 0 / 0 / 0 / 0 | 4,752 |
+| 10 | 2.41 | 2.71 | 10.1% | 5.3% | 290 | 1 / 0 / 1 / 0 | 133,059 |
+| 11 | 1.89 | 2.69 | 19.8% | 5.5% | 130 | 0 / 0 / 0 / 0 | 15,610 |
+| 12 | 2.22 | 1.91 | 14.4% | 18.0% | 1439 | 6 / 0 / 4 / 3 | 485,820 |
+| 13 | 1.96 | 2.70 | 18.0% | 2.9% | 364 | 1 / 0 / 1 / 0 | 139,202 |
+| 14 | 2.08 | 2.60 | 12.8% | 12.7% | 84 | 0 / 0 / 0 / 0 | 12,169 |
+| 15 | 2.32 | 2.65 | 9.9% | 1.7% | 246 | 0 / 0 / 0 / 0 | 104,888 |
+| 16 | 2.01 | 2.29 | 13.7% | 1.2% | 26 | 0 / 0 / 0 / 0 | 9,541 |
+| 17 | 2.39 | 1.98 | 16.1% | 6.9% | 838 | 5 / 1 / 2 / 2 | 269,211 |
+| 18 | 2.37 | 2.54 | 13.1% | 4.1% | 79 | 0 / 0 / 0 / 0 | 23,308 |
+| 19 | 1.95 | 2.64 | 16.4% | 2.7% | 25 | 0 / 0 / 0 / 0 | 2,595 |
+| 20 | 2.55 | 2.45 | 17.4% | 5.5% | 168 | 1 / 1 / 0 / 1 | 43,788 |
+| 21 | 2.49 | 2.94 | 10.4% | 11.3% | 28 | 0 / 0 / 0 / 0 | 3,791 |
+| 22 | 2.24 | 2.53 | 17.5% | 6.1% | 539 | 0 / 0 / 0 / 0 | 78,971 |
+| 23 | 2.32 | 2.65 | 13.2% | 2.9% | 134 | 1 / 0 / 1 / 0 | 35,822 |
+| 24 | 2.77 | 0.76 | 14.8% | 5.1% | 46 | 0 / 0 / 0 / 0 | 6,004 |
+| 25 | 2.18 | 2.32 | 19.3% | 4.6% | 101 | 0 / 0 / 0 / 0 | 8,764 |
+
+- **Median of per-session median per-turn holdout error: 16.1%** (was 26.3%).
+- **Fitted sessions at or under 15%: 12 of 25** (was 1 of 25).
+- Median fitted ratios: tool 2.32, context 2.56 chars/token. Pooled summed holdout error
+  (secondary): 6.2%.
+- By recorded growth on held-out turns (5,744 turns, median 15.5%): under 100 tokens 16.8%,
+  100–500 17.1%, 500–2,000 11.5%, 2,000–10,000 11.5%, 10,000 or more 16.6%. Small turns are no
+  longer the outlier. Most of their unexplained growth was attachment text.
+- Some context ratios are implausible: 0.4, 0.7, 0.8 and 1.0 chars/token in four sessions, and
+  249.8 in one (summed error 624.5%, median per-turn 36.4%). In these sessions the context
+  bucket probably still miscounts attachment content (the fallback for entries without a
+  rendered form is approximate). The fixed-ratio calibration line reports implied chars/token as
+  n/a because almost no turn now has tool results as its only arriving content.
+
+### Conclusion
+
+The criterion in the spec is met on the originating session (10.1%). Across recent sessions it is
+met in 12 of 25, and the median session is at 16.1%. The analyzer's per-family estimates are
+approximate: median per-turn holdout error ranges from 9.9% to 42.2% across fitted sessions. The
+benchmark does not depend on these estimates. It uses the usage recorded for each of its own runs.
+
+## Update 2026-09-17: per-turn criterion and compaction exclusion (superseded above)
 
 ### Reverted experiment: per-turn overhead term
 

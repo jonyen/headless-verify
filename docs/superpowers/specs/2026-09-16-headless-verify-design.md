@@ -165,9 +165,12 @@ confirmation before the full run. `--runs N` and `--tasks a,b` allow cheaper par
   content, recorded growth (context(k) − context(k−1) − output(k−1)) is modelled as tool-result
   chars / tool ratio + other context chars / context ratio + image tokens, fitted by least squares
   with non-negative coefficients. A class with fewer than 5 non-zero observations or a
-  non-positive fit is held at 4 chars/token. (Changed 2026-09-17:) before fitting and scoring,
-  turns are excluded and counted per reason: context resets (recorded context below the previous
-  turn's, or an explicit `compact_boundary` marker), the turn after each reset, and growth ≤ 0.
+  non-positive fit is held at 4 chars/token. Other context text includes user-entry text and
+  `attachment` entries (their rendered text; added 2026-09-17). (Changed 2026-09-17:) before
+  fitting and scoring, turns are excluded and counted per reason: a context drop (recorded context
+  below the previous turn's); the turn a compaction marker (`compact_boundary`, `isCompactSummary`)
+  lands on; the turn after a drop, only if its growth is negative or above 5× the session median;
+  and growth ≤ 0.
   No per-turn overhead term (tried and reverted 2026-09-17; see docs/validation.md).
   Validation is 5-fold holdout (folds by turn index mod 5). The criterion is the median absolute
   per-turn error on held-out turns; |Σ predicted − Σ recorded| / Σ recorded is reported as
@@ -219,7 +222,9 @@ All tests run with `node --test`, offline, spending no tokens.
   per-turn error within 15% of recorded growth on held-out turns (5-fold), with context-reset
   turns excluded. (Changed 2026-09-17 from the summed holdout error, which an intercept term
   showed can be near zero while single turns are 50% off. Earlier, 2026-09-16, changed from an
-  in-sample fixed-ratio comparison.) Status 2026-09-17: not met, 25.0%.
+  in-sample fixed-ratio comparison.) Status 2026-09-17: met, 10.1%, after attachments were
+  counted (was 25.0%). Across 25 recent fitted sessions: median 16.1%, range 9.9–42.2%, 12 at or
+  under 15%. Per-family estimates are approximate; the benchmark uses recorded usage.
 
 ## Open questions
 

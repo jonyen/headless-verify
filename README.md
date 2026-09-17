@@ -56,13 +56,16 @@ family, plus a calibration line comparing its estimates with the usage recorded 
 transcript. It reads local files only and never prints tool-result content.
 
 Token estimates use chars/token ratios fitted per session from the transcript's own recorded
-usage (separate ratios for tool-result text and other context text). Turns that break the model
-are left out and counted: context resets (compaction), the turn after each, and turns with growth
-≤ 0. Accuracy is the median per-turn error on held-out turns (5-fold cross-validation); the summed
-holdout error is shown as secondary, since totals can match while single turns are far off.
-Sessions with fewer than 20 usable turns fall back to a fixed 4 chars/token; `--fixed` forces that.
-On the originating session the median per-turn error is 25%, and 1 of 25 fitted recent sessions
-is at or under the 15% target, so treat per-family numbers as approximate; see
+usage: one ratio for tool-result text and one for other context text, which covers user-entry text
+and the harness's attachment entries. Some turns are left out and counted: turns where recorded
+context drops, the turn a compaction marker lands on, an implausible turn right after a drop, and
+turns with growth ≤ 0. Accuracy is the median per-turn error on held-out turns (5-fold
+cross-validation). The summed holdout error is shown as secondary, since totals can match while
+single turns are far off. Sessions with fewer than 20 usable turns fall back to a fixed
+4 chars/token, and `--fixed` forces that. On the originating session the median per-turn error is
+10.1%, within the 15% target. Across 25 recent fitted sessions it ranges from 9.9% to 42.2% (median
+16.1%, 12 at or under 15%), so treat per-family numbers as approximate. The benchmark uses the
+recorded usage of each run and does not depend on these estimates; see
 [docs/validation.md](docs/validation.md).
 
 ## Run the benchmark
