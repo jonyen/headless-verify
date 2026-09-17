@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","model":"claude-opus-5"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a","name":"mcp__claude-in-chrome__computer","input":{"action":"screenshot"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"a","content":[{"type":"text","text":"ok"},{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"/9j/"}}]}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b","name":"mcp__claude-in-chrome__computer","input":{"action":"screenshot"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"b","content":[{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"/9j/"}}]}]}}
+{"type":"result","subtype":"error_max_budget_usd","is_error":true,"duration_ms":90000,"num_turns":9,"total_cost_usd":1.5,"result":"","usage":{"input_tokens":40,"output_tokens":2000,"cache_creation_input_tokens":60000,"cache_read_input_tokens":200000}}
