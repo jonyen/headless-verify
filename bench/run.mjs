@@ -2,7 +2,7 @@
 // Runs the benchmark: each task × arm × run through `claude -p`, graded, written to results/.
 
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -38,65 +38,101 @@ function claudeVersion() {
 function runClaude(args, prompt, cwd) {
   return new Promise((resolve) => {
     const child = spawn('claude', [...args, prompt], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', () => {});
-    child.on('close', () => resolve(out));
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('close', () => resolve({ stdout, stderr }));
   });
 }
 
 async function once(item, fixture, cwd) {
   const url = fixture.urlFor(item.variant);
   const prompt = await loadPrompt(item.task, url);
-  const parsed = parseStream(await runClaude(armArgs(item.arm, { model, budgetUsd, pluginDir: repo }), prompt, cwd));
+  const { stdout, stderr } = await runClaude(armArgs(item.arm, { model, budgetUsd, pluginDir: repo }), prompt, cwd);
+  const parsed = parseStream(stdout);
   const answer = parsed.isError ? null : extractAnswer(parsed.finalText);
-  return { ...item, ...parsed, answer, correct: grade(answer, item.variant) };
+  const record = { ...item, ...parsed, answer, correct: grade(answer, item.variant) };
+  if (parsed.isError) record.stderrTail = stderr.slice(-2000);
+  return record;
 }
 
-const version = claudeVersion();
-const fixture = await startFixture();
-const work = await mkdtemp(join(tmpdir(), 'headless-verify-bench-'));
-
-// Preflight: the browser arm must actually have claude-in-chrome.
-const probe = parseStream(
-  await runClaude(
-    armArgs('browser', { model, budgetUsd: 0.5, pluginDir: repo }),
-    'List the names of your tools that start with mcp__claude-in-chrome, then stop.',
-    work,
-  ),
-);
-if (!/mcp__claude-in-chrome/.test(probe.finalText)) {
-  console.error('claude-in-chrome is not available to `claude -p --chrome`. Connect the extension and retry.');
-  await fixture.close();
-  process.exit(2);
-}
-
-const plan = schedule({ tasks, runs, seed });
-const calibration = await once(plan.find((p) => p.arm === 'browser'), fixture, work);
-const calibrationH = await once(plan.find((p) => p.arm === 'headless'), fixture, work);
-const estimate = ((calibration.costUsd + calibrationH.costUsd) / 2) * plan.length;
-console.log(`${plan.length} runs planned (${tasks.length} tasks × 2 arms × ${runs}); estimated cost ≈ $${estimate.toFixed(2)} (budget cap $${budgetUsd}/run)`);
-
-if (!yes) {
+async function confirm(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await rl.question('Proceed? [y/N] ');
+  const answer = await rl.question(question);
   rl.close();
-  if (answer.trim().toLowerCase() !== 'y') {
+  return answer.trim().toLowerCase() === 'y';
+}
+
+async function main() {
+  const version = claudeVersion();
+  const fixture = await startFixture();
+  const work = await mkdtemp(join(tmpdir(), 'headless-verify-bench-'));
+
+  try {
+    if (!yes) {
+      const preflightCap = 3 * budgetUsd;
+      const proceed = await confirm(
+        `Preflight check and 2 calibration runs will spend up to $${preflightCap.toFixed(2)} (cap $${budgetUsd} each). Continue? [y/N] `,
+      );
+      if (!proceed) {
+        process.exitCode = 0;
+        return;
+      }
+    }
+
+    // Preflight: the browser arm must actually have claude-in-chrome.
+    const { stdout: preflightOut } = await runClaude(
+      armArgs('browser', { model, budgetUsd: 0.5, pluginDir: repo }),
+      'List the names of your tools that start with mcp__claude-in-chrome, then stop.',
+      work,
+    );
+    const probe = parseStream(preflightOut);
+    if (!/mcp__claude-in-chrome/.test(probe.finalText)) {
+      console.error('claude-in-chrome is not available to `claude -p --chrome`. Connect the extension and retry.');
+      process.exitCode = 2;
+      return;
+    }
+
+    const plan = schedule({ tasks, runs, seed });
+    const calibrationItem = plan.find((p) => p.arm === 'browser');
+    const calibrationHItem = plan.find((p) => p.arm === 'headless');
+    const calibration = await once(calibrationItem, fixture, work);
+    const calibrationH = await once(calibrationHItem, fixture, work);
+    console.log(`[calibration] ${calibrationItem.task} browser ${calibrationItem.variant}: ${calibration.correct ? 'correct' : 'wrong'} · $${calibration.costUsd.toFixed(3)}`);
+    console.log(`[calibration] ${calibrationHItem.task} headless ${calibrationHItem.variant}: ${calibrationH.correct ? 'correct' : 'wrong'} · $${calibrationH.costUsd.toFixed(3)}`);
+    const records = [calibration, calibrationH];
+
+    const remaining = plan.length - 2;
+    const estimate = ((calibration.costUsd + calibrationH.costUsd) / 2) * remaining;
+    console.log(
+      `${plan.length} runs planned (${tasks.length} tasks × 2 arms × ${runs}); ${remaining} remaining after calibration; estimated cost ≈ $${estimate.toFixed(2)} (budget cap $${budgetUsd}/run)`,
+    );
+
+    if (!yes) {
+      const proceed = await confirm('Proceed? [y/N] ');
+      if (!proceed) {
+        process.exitCode = 0;
+        return;
+      }
+    }
+
+    for (const [i, item] of plan.entries()) {
+      if (item === calibrationItem || item === calibrationHItem) continue;
+      const record = await once(item, fixture, work);
+      records.push(record);
+      console.log(`[${i + 1}/${plan.length}] ${item.task} ${item.arm} ${item.variant}: ${record.correct ? 'correct' : 'wrong'} · $${record.costUsd.toFixed(3)}${record.isError ? ` · ${record.subtype}` : ''}`);
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    await mkdir(join(repo, 'results'), { recursive: true });
+    const path = join(repo, 'results', `${date}-${model}.json`);
+    await writeFile(path, JSON.stringify({ meta: { date, model, runs, seed, budgetUsd, claudeVersion: version }, records }, null, 2));
+    console.log(`wrote ${path}\nnext: node bench/report.mjs ${path} --readme`);
+  } finally {
     await fixture.close();
-    process.exit(0);
+    await rm(work, { recursive: true, force: true });
   }
 }
 
-const records = [];
-for (const [i, item] of plan.entries()) {
-  const record = await once(item, fixture, work);
-  records.push(record);
-  console.log(`[${i + 1}/${plan.length}] ${item.task} ${item.arm} ${item.variant}: ${record.correct ? 'correct' : 'wrong'} · $${record.costUsd.toFixed(3)}${record.isError ? ` · ${record.subtype}` : ''}`);
-}
-await fixture.close();
-
-const date = new Date().toISOString().slice(0, 10);
-await mkdir(join(repo, 'results'), { recursive: true });
-const path = join(repo, 'results', `${date}-${model}.json`);
-await writeFile(path, JSON.stringify({ meta: { date, model, runs, seed, budgetUsd, claudeVersion: version }, records }, null, 2));
-console.log(`wrote ${path}\nnext: node bench/report.mjs ${path} --readme`);
+await main();
