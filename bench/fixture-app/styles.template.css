@@ -4,6 +4,5 @@ section { margin-bottom: 32px; }
 .spacer-left { display: inline-block; width: 120px; }
 #track { display: inline-block; width: 400px; height: 16px; background: #ccd; vertical-align: middle; }
 #captions .active { background: #fde047; }
-#toolbar { max-width: 260px; display: flex; flex-wrap: wrap; gap: 8px; border: 1px solid #ccc; padding: 8px; }
+#toolbar { max-width: 260px; display: flex; flex-wrap: {{TOOLBAR_WRAP}}; gap: 8px; border: 1px solid #ccc; padding: 8px; }
 #toolbar button, #toolbar label { white-space: nowrap; }
-body.bug #toolbar { flex-wrap: nowrap; }

@@ -8,7 +8,7 @@ before(async () => { fixture = await startFixture(); });
 after(() => fixture.close());
 
 const opts = { log: () => {}, exit: false, timeout: 3000 };
-const run = (variant, fn) => verify(`${fixture.url}?variant=${variant}`, fn, opts);
+const run = (variant, fn) => verify(fixture.urlFor(variant), fn, opts);
 
 const checks = {
   load: async (page, check) => {
@@ -54,3 +54,24 @@ for (const [name, fn] of Object.entries(checks)) {
     assert.equal(r.exitCode, 1);
   });
 }
+
+test('served content does not leak which variant is served', async () => {
+  const okUrl = fixture.urlFor('ok');
+  const bugUrl = fixture.urlFor('bug');
+
+  const okPath = new URL(okUrl).pathname;
+  const bugPath = new URL(bugUrl).pathname;
+  const okSegments = okPath.split('/').filter(Boolean);
+  const bugSegments = bugPath.split('/').filter(Boolean);
+  assert.equal(okSegments[0], 's');
+  assert.equal(bugSegments[0], 's');
+  assert.notEqual(okSegments[1], bugSegments[1]);
+
+  for (const base of [okUrl, bugUrl]) {
+    for (const file of ['index.html', 'app.js', 'styles.css']) {
+      const res = await fetch(new URL(file, base));
+      const text = await res.text();
+      assert.doesNotMatch(text, /\bbug\b|variant/i, `${file} at ${base} leaked variant info`);
+    }
+  }
+});
