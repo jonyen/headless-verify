@@ -20,9 +20,13 @@ function shuffle(xs, random) {
 export function schedule({ tasks, runs, seed }) {
   const random = rng(seed);
   const out = [];
-  for (const task of shuffle(tasks, random)) {
+  // Alternate which variant gets the extra run (odd `runs`) by task position,
+  // so across tasks the ok/bug split is as close to half as possible.
+  for (const [t, task] of shuffle(tasks, random).entries()) {
+    const first = t % 2 === 0 ? 'ok' : 'bug';
+    const second = first === 'ok' ? 'bug' : 'ok';
     const variants = shuffle(
-      Array.from({ length: runs }, (_, i) => (i % 2 === 0 ? 'ok' : 'bug')),
+      Array.from({ length: runs }, (_, i) => (i % 2 === 0 ? first : second)),
       random,
     );
     for (let run = 0; run < runs; run++) {

@@ -12,8 +12,8 @@ const fx = (name) => readFile(new URL(`./fixtures/${name}`, import.meta.url), 'u
 
 test('prompts load for every task with the URL filled in', async () => {
   for (const id of TASK_IDS) {
-    const p = await loadPrompt(id, 'http://127.0.0.1:9/?variant=ok');
-    assert.match(p, /http:\/\/127\.0\.0\.1:9\/\?variant=ok/);
+    const p = await loadPrompt(id, 'http://127.0.0.1:9/s/3fa94c1e/');
+    assert.match(p, /http:\/\/127\.0\.0\.1:9\/s\/3fa94c1e\//);
     assert.doesNotMatch(p, /\{URL\}|bug|broken|defect/i);
   }
 });
@@ -48,6 +48,9 @@ test('median, IQR and savings', () => {
   assert.equal(median([4, 1, 3, 2]), 2.5);
   assert.deepEqual(iqr([1, 2, 3, 4, 5]), [2, 4]);
   assert.equal(savedPct(200, 50), 75);
+  assert.equal(savedPct(0, 50), null);
+  assert.equal(savedPct(NaN, 50), null);
+  assert.equal(savedPct(Infinity, 50), null);
 });
 
 test('parseStream reads usage, cost, answer and screenshots', async () => {
@@ -77,7 +80,12 @@ test('arm arguments isolate the tools under test', () => {
     assert.equal(args[args.indexOf('--max-budget-usd') + 1], '2');
     assert.equal(args[args.indexOf('--model') + 1], 'claude-opus-5');
     assert.equal(args.at(-1), '--');
+    assert.ok(args.includes('--strict-mcp-config'));
+    assert.equal(args[args.indexOf('--setting-sources') + 1], 'project');
+    assert.ok(!args.includes('--disable-slash-commands'), 'would also disable the plugin skill');
   }
+  const shared = (args) => args.slice(0, args.indexOf('--model') + 4);
+  assert.deepEqual(shared(browser), shared(headless));
   assert.ok(browser.includes('--chrome'));
   assert.equal(browser[browser.indexOf('--disallowedTools') + 1], 'Bash');
   assert.ok(!browser.includes('--plugin-dir'));
@@ -99,4 +107,33 @@ test('schedule: equal ok/bug split, identical variants across arms, interleaved'
   const firstTask = s.filter((r) => r.task === s[0].task).map((r) => r.arm);
   assert.deepEqual(firstTask.slice(0, 4), ['browser', 'headless', 'headless', 'browser']);
   assert.deepEqual(schedule({ tasks: TASK_IDS, runs: 4, seed: 7 }), s);
+});
+
+test('schedule: variants stay balanced across tasks for odd runs', () => {
+  for (const seed of [1, 7, 42, 999, 12345]) {
+    for (const runs of [1, 3, 5]) {
+      const s = schedule({ tasks: TASK_IDS, runs, seed });
+      for (const arm of ['browser', 'headless']) {
+        const mine = s.filter((r) => r.arm === arm);
+        const ok = mine.filter((r) => r.variant === 'ok').length;
+        const bug = mine.length - ok;
+        assert.ok(Math.abs(ok - bug) <= 1, `seed ${seed} runs ${runs} ${arm}: ${ok} ok / ${bug} bug`);
+      }
+      for (const task of TASK_IDS) {
+        const seq = (arm) => s.filter((r) => r.task === task && r.arm === arm).sort((a, b) => a.run - b.run).map((r) => r.variant);
+        assert.deepEqual(seq('browser'), seq('headless'));
+        const ok = seq('browser').filter((v) => v === 'ok').length;
+        assert.ok(Math.abs(ok - (runs - ok)) <= 1);
+      }
+      assert.deepEqual(schedule({ tasks: TASK_IDS, runs, seed }), s);
+    }
+    for (const runs of [2, 4, 6]) {
+      const s = schedule({ tasks: TASK_IDS, runs, seed });
+      for (const task of TASK_IDS) {
+        assert.equal(s.filter((r) => r.task === task && r.arm === 'browser' && r.variant === 'ok').length, runs / 2);
+      }
+    }
+  }
+  const one = schedule({ tasks: TASK_IDS, runs: 1, seed: 3 }).filter((r) => r.arm === 'browser');
+  assert.ok([2, 3].includes(one.filter((r) => r.variant === 'ok').length));
 });

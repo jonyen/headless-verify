@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // Runs the benchmark: each task × arm × run through `claude -p`, graded, written to results/.
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { armArgs } from './arms.mjs';
-import { extractAnswer, grade } from './grade.mjs';
+import { PREFLIGHT_BUDGET_USD, preflightConsent, resultsFileName, runProcess, runRecord } from './runner.mjs';
 import { schedule } from './schedule.mjs';
 import { startFixture } from './server.mjs';
+import { stagePlugin } from './stage.mjs';
 import { parseStream } from './stream.mjs';
 import { TASK_IDS, loadPrompt } from './tasks.mjs';
 
@@ -24,6 +25,7 @@ const tasks = flag('tasks', TASK_IDS.join(',')).split(',');
 const model = flag('model', 'claude-opus-5');
 const budgetUsd = Number(flag('budget', '2'));
 const seed = Number(flag('seed', String(Date.now() % 100000)));
+const timeoutMs = Number(flag('timeout-min', '10')) * 60_000;
 const yes = process.argv.includes('--yes');
 
 function claudeVersion() {
@@ -35,26 +37,14 @@ function claudeVersion() {
   }
 }
 
-function runClaude(args, prompt, cwd) {
-  return new Promise((resolve) => {
-    const child = spawn('claude', [...args, prompt], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => (stdout += d));
-    child.stderr.on('data', (d) => (stderr += d));
-    child.on('close', () => resolve({ stdout, stderr }));
-  });
-}
+// Every claude run is killed after --timeout-min minutes (default 10).
+const runClaude = (args, prompt, cwd) => runProcess('claude', [...args, prompt], { cwd, timeoutMs });
 
-async function once(item, fixture, cwd) {
+async function once(item, fixture, cwd, pluginDir) {
   const url = fixture.urlFor(item.variant);
   const prompt = await loadPrompt(item.task, url);
-  const { stdout, stderr } = await runClaude(armArgs(item.arm, { model, budgetUsd, pluginDir: repo }), prompt, cwd);
-  const parsed = parseStream(stdout);
-  const answer = parsed.isError ? null : extractAnswer(parsed.finalText);
-  const record = { ...item, ...parsed, answer, correct: grade(answer, item.variant) };
-  if (parsed.isError) record.stderrTail = stderr.slice(-2000);
-  return record;
+  const result = await runClaude(armArgs(item.arm, { model, budgetUsd, pluginDir }), prompt, cwd);
+  return runRecord(item, result);
 }
 
 async function confirm(question) {
@@ -67,14 +57,15 @@ async function confirm(question) {
 async function main() {
   const version = claudeVersion();
   const fixture = await startFixture();
-  const work = await mkdtemp(join(tmpdir(), 'headless-verify-bench-'));
+  const work = await mkdtemp(join(tmpdir(), 'hv-work-'));
+  // The headless arm gets a plugin-only copy, never the repo root: the repo holds
+  // the answer key (bench/variants.mjs), the spec and the fixture tests.
+  const pluginDir = await mkdtemp(join(tmpdir(), 'hv-plugin-'));
 
   try {
+    await stagePlugin(repo, pluginDir);
     if (!yes) {
-      const preflightCap = 3 * budgetUsd;
-      const proceed = await confirm(
-        `Preflight check and 2 calibration runs will spend up to $${preflightCap.toFixed(2)} (cap $${budgetUsd} each). Continue? [y/N] `,
-      );
+      const proceed = await confirm(preflightConsent(budgetUsd));
       if (!proceed) {
         process.exitCode = 0;
         return;
@@ -83,7 +74,7 @@ async function main() {
 
     // Preflight: the browser arm must actually have claude-in-chrome.
     const { stdout: preflightOut } = await runClaude(
-      armArgs('browser', { model, budgetUsd: 0.5, pluginDir: repo }),
+      armArgs('browser', { model, budgetUsd: PREFLIGHT_BUDGET_USD, pluginDir }),
       'List the names of your tools that start with mcp__claude-in-chrome, then stop.',
       work,
     );
@@ -97,8 +88,8 @@ async function main() {
     const plan = schedule({ tasks, runs, seed });
     const calibrationItem = plan.find((p) => p.arm === 'browser');
     const calibrationHItem = plan.find((p) => p.arm === 'headless');
-    const calibration = await once(calibrationItem, fixture, work);
-    const calibrationH = await once(calibrationHItem, fixture, work);
+    const calibration = await once(calibrationItem, fixture, work, pluginDir);
+    const calibrationH = await once(calibrationHItem, fixture, work, pluginDir);
     console.log(`[calibration] ${calibrationItem.task} browser ${calibrationItem.variant}: ${calibration.correct ? 'correct' : 'wrong'} · $${calibration.costUsd.toFixed(3)}`);
     console.log(`[calibration] ${calibrationHItem.task} headless ${calibrationHItem.variant}: ${calibrationH.correct ? 'correct' : 'wrong'} · $${calibrationH.costUsd.toFixed(3)}`);
     const records = [calibration, calibrationH];
@@ -119,19 +110,25 @@ async function main() {
 
     for (const [i, item] of plan.entries()) {
       if (item === calibrationItem || item === calibrationHItem) continue;
-      const record = await once(item, fixture, work);
+      const record = await once(item, fixture, work, pluginDir);
       records.push(record);
-      console.log(`[${i + 1}/${plan.length}] ${item.task} ${item.arm} ${item.variant}: ${record.correct ? 'correct' : 'wrong'} · $${record.costUsd.toFixed(3)}${record.isError ? ` · ${record.subtype}` : ''}`);
+      console.log(`[${i + 1}/${plan.length}] ${item.task} ${item.arm} ${item.variant}: ${record.correct ? 'correct' : 'wrong'} · $${record.costUsd.toFixed(3)}${record.isError ? ` · ${record.subtype}` : ''}${record.leakSuspect ? ' · LEAK SUSPECT' : ''}`);
     }
 
-    const date = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
     await mkdir(join(repo, 'results'), { recursive: true });
-    const path = join(repo, 'results', `${date}-${model}.json`);
-    await writeFile(path, JSON.stringify({ meta: { date, model, runs, seed, budgetUsd, claudeVersion: version }, records }, null, 2));
-    console.log(`wrote ${path}\nnext: node bench/report.mjs ${path} --readme`);
+    const name = resultsFileName(now, model);
+    const path = join(repo, 'results', name);
+    await writeFile(
+      path,
+      JSON.stringify({ meta: { date, model, runs, seed, budgetUsd, timeoutMin: timeoutMs / 60_000, claudeVersion: version }, records }, null, 2),
+    );
+    console.log(`wrote ${path}\nnext: node bench/report.mjs ${relative(process.cwd(), path)} --readme`);
   } finally {
     await fixture.close();
     await rm(work, { recursive: true, force: true });
+    await rm(pluginDir, { recursive: true, force: true });
   }
 }
 

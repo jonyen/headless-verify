@@ -11,4 +11,5 @@ function quantile(xs, q) {
 
 export const median = (xs) => quantile(xs, 0.5);
 export const iqr = (xs) => [quantile(xs, 0.25), quantile(xs, 0.75)];
-export const savedPct = (browser, headless) => ((browser - headless) / browser) * 100;
+export const savedPct = (browser, headless) =>
+  Number.isFinite(browser) && browser !== 0 && Number.isFinite(headless) ? ((browser - headless) / browser) * 100 : null;
