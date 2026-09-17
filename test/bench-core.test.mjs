@@ -28,6 +28,15 @@ test('extractAnswer takes the last JSON object with a boolean works', () => {
   assert.deepEqual(extractAnswer(textWithBraces), { works: false, cause: 'handler reads obj.value where obj is {} and throws }' });
 });
 
+test('extractAnswer ignores unbalanced braces and quotes before the answer', () => {
+  // Stray opening brace before answer
+  assert.deepEqual(extractAnswer('use {x to fix. Then: \n{"works": true, "cause": "ok"}'), { works: true, cause: 'ok' });
+  // Stray closing brace before answer
+  assert.deepEqual(extractAnswer('oops } stray\n{"works": true, "cause": "ok"}'), { works: true, cause: 'ok' });
+  // Unpaired quote before answer
+  assert.deepEqual(extractAnswer('the button says "Save\n{"works": true, "cause": "ok"}'), { works: true, cause: 'ok' });
+});
+
 test('grade compares works against the variant', () => {
   assert.equal(grade({ works: true, cause: '' }, 'ok'), true);
   assert.equal(grade({ works: true, cause: '' }, 'bug'), false);
