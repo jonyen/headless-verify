@@ -9,8 +9,15 @@ const UNKNOWN_IMAGE_TOKENS = 1600;
 // tool-result-only turns without feeding back into this estimate.
 export const CHARS_PER_TOKEN = 4;
 
-export function resultTokens(result) {
-  const text = Math.ceil(result.textChars / CHARS_PER_TOKEN);
+export const FIXED_RATIOS = Object.freeze({ toolCharsPerToken: CHARS_PER_TOKEN, contextCharsPerToken: CHARS_PER_TOKEN });
+
+// `ratios` (see analyze/fit.mjs) sets chars per token separately for tool-result text and for
+// other context text (context:user, context:attachment); the default is the spec's fixed 4/4.
+export const isContext = (result) => typeof result.name === 'string' && result.name.startsWith('context:');
+
+export function resultTokens(result, ratios = FIXED_RATIOS) {
+  const divisor = isContext(result) ? ratios.contextCharsPerToken : ratios.toolCharsPerToken;
+  const text = Math.ceil(result.textChars / divisor);
   const image = result.images.reduce(
     (sum, img) => sum + (img ? Math.round((img.width * img.height) / 750) : UNKNOWN_IMAGE_TOKENS),
     0,
@@ -20,12 +27,12 @@ export function resultTokens(result) {
 
 const context = (u) => u.input + u.cacheCreation + u.cacheRead;
 
-export function costBreakdown({ results, turns }) {
+export function costBreakdown({ results, turns }, { ratios = FIXED_RATIOS } = {}) {
   const byFamily = new Map();
   for (const result of results) {
     const family = toolFamily(result.name);
     const row = byFamily.get(family) ?? { family, calls: 0, images: 0, directTokens: 0, carryTokens: 0 };
-    const { total } = resultTokens(result);
+    const { total } = resultTokens(result, ratios);
     const laterTurns = turns.filter((t) => t.index > result.turn + 1).length;
     row.calls += 1;
     row.images += result.images.length;
@@ -39,6 +46,9 @@ export function costBreakdown({ results, turns }) {
     .map((f) => ({ ...f, shareOfInput: billedInput ? (f.directTokens + f.carryTokens) / billedInput : 0 }))
     .sort((a, b) => b.directTokens + b.carryTokens - (a.directTokens + a.carryTokens));
 
+  // Fixed-ratio calibration: always at the spec's 4 chars/token, whatever `ratios` is, so it
+  // stays comparable across runs. The fitted method's own validation is its k-fold holdout
+  // error (analyze/fit.mjs).
   let estimated = 0;
   let recorded = 0;
   // Empirical ratio, kept separate from `estimated`/`recorded`: it never feeds back into the
@@ -54,7 +64,7 @@ export function costBreakdown({ results, turns }) {
     const turnRecorded = context(turns[k].usage) - context(turns[k - 1].usage) - turns[k - 1].usage.output;
     recorded += turnRecorded;
 
-    const onlyToolResults = arriving.every((r) => r.name !== 'context:user');
+    const onlyToolResults = arriving.every((r) => !isContext(r));
     if (onlyToolResults) {
       const textChars = arriving.reduce((sum, r) => sum + r.textChars, 0);
       const imageTokens = arriving.reduce((sum, r) => sum + resultTokens(r).image, 0);

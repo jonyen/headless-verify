@@ -1,16 +1,21 @@
 #!/usr/bin/env node
-// Usage: node analyze/session-cost.mjs <session.jsonl | --all> [--since YYYY-MM-DD] [--json]
+// Usage: node analyze/session-cost.mjs <session.jsonl | --all> [--since YYYY-MM-DD] [--json] [--fixed]
 // Reads Claude Code transcripts locally and reports token cost by tool family.
-// Output never includes tool-result content.
+// Per session, chars-per-token ratios are fitted from the transcript's recorded usage and
+// validated by the median per-turn error on held-out turns (analyze/fit.mjs), after excluding
+// context resets and non-positive growth; sessions with too little data, or --fixed, use the
+// spec's fixed 4 chars/token. Output never includes tool-result content.
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseTranscript } from './transcript.mjs';
-import { costBreakdown } from './cost.mjs';
+import { costBreakdown, FIXED_RATIOS } from './cost.mjs';
+import { buildObservations, fitRatios, summarizeFits } from './fit.mjs';
 
 const args = process.argv.slice(2);
 const json = args.includes('--json');
+const forceFixed = args.includes('--fixed');
 const sinceIdx = args.indexOf('--since');
 const since = sinceIdx >= 0 ? new Date(args[sinceIdx + 1]) : null;
 const target = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--since');
@@ -30,7 +35,7 @@ async function allTranscripts() {
 }
 
 if (!target && !args.includes('--all')) {
-  console.error('usage: session-cost.mjs <session.jsonl | --all> [--since YYYY-MM-DD] [--json]');
+  console.error('usage: session-cost.mjs <session.jsonl | --all> [--since YYYY-MM-DD] [--json] [--fixed]');
   process.exit(2);
 }
 
@@ -38,10 +43,18 @@ const files = args.includes('--all') ? await allTranscripts() : [target];
 let malformed = 0;
 // Carry cost must not cross session boundaries.
 const reports = [];
+const fits = [];
 for (const file of files) {
-  const transcript = parseTranscript(await readFile(file, 'utf8'));
+  // --fixed reproduces the original analyzer exactly: no attachment counting, no fit, no
+  // exclusions, 4 chars/token for all text.
+  const transcript = parseTranscript(await readFile(file, 'utf8'), { attachments: !forceFixed });
   malformed += transcript.malformed;
-  reports.push(costBreakdown(transcript));
+  const fit = forceFixed
+    ? { ...FIXED_RATIOS, method: 'fixed', reason: '--fixed' }
+    : { ...fitRatios(buildObservations(transcript)), attachmentChars: transcript.attachmentChars };
+  fits.push(fit);
+  const ratios = fit.method === 'fitted' ? fit : FIXED_RATIOS;
+  reports.push(costBreakdown(transcript, { ratios }));
 }
 const combined = reports.reduce(
   (acc, r) => {
@@ -70,8 +83,45 @@ const errorPct = combined.recorded ? (Math.abs(combined.estimated - combined.rec
 // back into `estimated`.
 const impliedCharsPerToken = combined.impliedDenominator > 0 ? combined.impliedTextChars / combined.impliedDenominator : null;
 
+// Ratio summary: the single session's fit, or headline figures across sessions (with and without
+// sessions where a class was fitted outside the plausible range).
+const pick = (f) =>
+  forceFixed
+    ? { method: f.method, toolCharsPerToken: f.toolCharsPerToken, contextCharsPerToken: f.contextCharsPerToken, reason: f.reason }
+    : {
+        method: f.method,
+        toolCharsPerToken: f.toolCharsPerToken,
+        contextCharsPerToken: f.contextCharsPerToken,
+        criterion: f.criterion,
+        medianTurnHoldoutErrorPct: f.medianTurnHoldoutErrorPct,
+        summedHoldoutErrorPct: f.summedHoldoutErrorPct,
+        observations: f.observations,
+        dropped: f.dropped,
+        excluded: f.excluded,
+        compactMarkers: f.compactMarkers,
+        attachmentChars: f.attachmentChars,
+        outOfRange: f.outOfRange,
+        ...(f.fittedClasses ? { fittedClasses: f.fittedClasses } : {}),
+        ...(f.reason ? { reason: f.reason } : {}),
+      };
+const sum = (key) => fits.reduce((s, f) => s + f[key], 0);
+const ratios =
+  files.length === 1
+    ? pick(fits[0])
+    : forceFixed
+      ? { method: 'fixed', sessions: fits.length, reason: '--fixed' }
+      : {
+          ...summarizeFits(fits),
+          observations: sum('observations'),
+          dropped: sum('dropped'),
+          excluded: Object.fromEntries(['contextDrop', 'compactMarker', 'afterDrop', 'nonPositiveGrowth'].map((k) => [k, fits.reduce((s, f) => s + f.excluded[k], 0)])),
+          compactMarkers: sum('compactMarkers'),
+          attachmentChars: sum('attachmentChars'),
+          perSession: files.map((file, i) => ({ session: file.split('/').pop().replace(/\.jsonl$/, ''), ...pick(fits[i]) })),
+        };
+
 if (json) {
-  console.log(JSON.stringify({ sessions: files.length, malformed, billedInput: combined.billedInput, families, calibration: { estimated: combined.estimated, recorded: combined.recorded, errorPct, impliedCharsPerToken } }, null, 2));
+  console.log(JSON.stringify({ sessions: files.length, malformed, billedInput: combined.billedInput, families, ratios, calibration: { estimated: combined.estimated, recorded: combined.recorded, errorPct, impliedCharsPerToken } }, null, 2));
 } else {
   const fmt = (n) => Math.round(n).toLocaleString('en-US');
   console.log(`Sessions: ${files.length} · billed input tokens: ${fmt(combined.billedInput)}${malformed ? ` · skipped ${malformed} malformed lines` : ''}\n`);
@@ -81,5 +131,23 @@ if (json) {
     console.log(`| ${f.family} | ${f.calls} | ${f.images} | ${fmt(f.directTokens)} | ${fmt(f.carryTokens)} | ${(f.shareOfInput * 100).toFixed(1)}% |`);
   }
   const impliedStr = impliedCharsPerToken === null ? 'n/a' : impliedCharsPerToken.toFixed(2);
-  console.log(`\nCalibration: estimated ${fmt(combined.estimated)} vs recorded ${fmt(combined.recorded)} tokens of new context (${errorPct.toFixed(1)}% off) · implied chars/token (tool-result-only turns): ${impliedStr}`);
+  const pct = (x) => (x === null ? 'n/a' : `${x.toFixed(1)}%`);
+  const r2 = (x) => (x === null ? 'n/a' : x.toFixed(2));
+  const exc = (f) => `observations ${f.observations} · excluded: context drop ${f.excluded.contextDrop}, compact marker ${f.excluded.compactMarker}, after drop ${f.excluded.afterDrop}, growth ≤ 0: ${f.excluded.nonPositiveGrowth}${f.compactMarkers ? ` (${f.compactMarkers} compact markers)` : ''} · attachment chars ${fmt(f.attachmentChars)}`;
+  const range = (xs) => (xs?.length ? ` · out of range (1-8 chars/token, held at 4): ${xs.join(', ')}` : '');
+  if (forceFixed) {
+    console.log(`\nRatios: fixed (--fixed) · tool 4.00 chars/token · context 4.00 chars/token${files.length > 1 ? ` · ${files.length} sessions` : ''}`);
+  } else if (files.length === 1) {
+    const f = ratios;
+    const head = f.method === 'fitted' ? 'fitted' : `fixed (${f.reason})`;
+    console.log(`\nRatios: ${head} · tool ${r2(f.toolCharsPerToken)} chars/token · context ${r2(f.contextCharsPerToken)} chars/token${range(f.outOfRange)} · median per-turn holdout error ${pct(f.medianTurnHoldoutErrorPct)} (criterion) · summed holdout error ${pct(f.summedHoldoutErrorPct)} (secondary) · ${exc(f)}`);
+  } else {
+    const line = (h, label) =>
+      `${label}: fitted in ${h.fittedSessions}, fixed in ${h.fixedSessions} · median tool ${r2(h.medianToolCharsPerToken)} / context ${r2(h.medianContextCharsPerToken)} chars/token (fitted classes only) · median of per-session median per-turn holdout error ${pct(h.medianSessionMedianTurnHoldoutErrorPct)} (criterion) · ${h.sessionsMeeting15Pct} of ${h.fittedSessions} fitted sessions ≤15% · pooled summed holdout error ${pct(h.pooledSummedHoldoutErrorPct)} (secondary)`;
+    console.log(`\n${line(ratios.all, 'Ratios, all sessions')}`);
+    console.log(`${line(ratios.inRangeOnly, `Ratios, excluding ${ratios.outOfRangeSessions} sessions with an out-of-range class`)}`);
+    console.log(exc(ratios));
+  }
+  if (!forceFixed) console.log('Summed holdout error is secondary: totals can match while individual turns are far off.');
+  console.log(`Fixed-ratio calibration: estimated ${fmt(combined.estimated)} vs recorded ${fmt(combined.recorded)} tokens of new context (${errorPct.toFixed(1)}% off) · implied chars/token (tool-result-only turns): ${impliedStr}`);
 }

@@ -48,16 +48,29 @@ Not run yet.
 
 ```sh
 node analyze/session-cost.mjs ~/.claude/projects/<project>/<session>.jsonl
-node analyze/session-cost.mjs --all --since 2026-09-01
+node analyze/session-cost.mjs --all --since 2026-09-01   # add --fixed for 4 chars/token
 ```
 
 Reports calls, images, direct tokens and carry tokens (results re-read on later turns) per tool
 family, plus a calibration line comparing its estimates with the usage recorded in the
 transcript. It reads local files only and never prints tool-result content.
 
-The estimates are not yet calibrated: on a tool-output-heavy session they currently come to about
-half of the recorded usage (tool output implies ~1.5 chars/token, against the fixed 4 chars/token
-the estimate uses), so treat the numbers as a lower bound; see [docs/validation.md](docs/validation.md).
+Token estimates use chars/token ratios fitted per session from the transcript's own recorded
+usage: one ratio for tool-result text and one for other context text, which covers user-entry text
+and the harness's attachment entries. A ratio fitted outside 1–8 chars/token is held at 4 and
+reported. Some turns are left out and counted: turns where recorded context drops, the turn a
+compaction marker lands on, an implausible turn right after a drop, and turns with growth ≤ 0.
+Accuracy is the median per-turn error on held-out turns (5-fold cross-validation). The summed
+holdout error is shown as secondary, since totals can match while single turns are far off.
+Sessions with fewer than 20 usable turns fall back to a fixed 4 chars/token. `--fixed`
+reproduces the original fixed-ratio analyzer exactly: no attachments, no fit, no exclusions. On
+the originating session the median per-turn error is 10.0%, within the 15% target. Across 25
+recent fitted sessions the median is 14.4%
+(13 at or under 15%, range 9.9–38.4%), or
+13.9% (12 of 21) without the 4 sessions with an out-of-range ratio.
+These are development-set figures, and the tool/context split is weakly identifiable, so treat
+per-family numbers as approximate. The benchmark uses the recorded usage of each run and does
+not depend on these estimates; see [docs/validation.md](docs/validation.md).
 
 ## Run the benchmark
 
