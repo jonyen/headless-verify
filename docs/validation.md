@@ -9,8 +9,8 @@ benchmark, push) are out of scope for this pass and were not run.
 npm test
 ```
 
-Result: **PASS** — 38/38 tests (`node --test test/*.test.mjs`), including two new tests added in
-this pass (see Step 2).
+Result: **PASS** — 39/39 tests (`node --test test/*.test.mjs`), including new tests added in this
+pass (see Step 2).
 
 ## Step 2: Analyzer calibration on the originating session
 
@@ -22,90 +22,95 @@ node analyze/session-cost.mjs ~/.claude/projects/-Users-jonyen-Projects/c34456c0
 
 ### Cause of the gap
 
-An earlier run on a different transcript was 43.7% off; before this fix, this session's
-calibration was **62.1% off** (worse — this session is more tool/CLI-output heavy). Investigated
-by comparing, per turn, recorded context growth (`cache_creation + cache_read + input` this turn,
-minus the previous turn's `output`) against (a) tool-result content and (b) everything else that
-arrives in a `user` entry, using a throwaway script over `parseTranscript`'s output plus the raw
-JSONL (never printing any transcript text — only chars/tokens were computed and logged).
+An earlier run on a different transcript was 43.7% off; before any fix, this session's calibration
+was **62.1% off** (worse — this session is more tool/CLI-output heavy). Investigated by comparing,
+per turn, recorded context growth (`cache_creation + cache_read + input` this turn, minus the
+previous turn's `output`) against (a) tool-result content and (b) everything else that arrives in a
+`user` entry, using a throwaway script over `parseTranscript`'s output plus the raw JSONL (never
+printing any transcript text — only chars/tokens were computed and logged).
 
-Two separate causes were found, both backed by counts:
+One cause was fixed; a second was found but is **not** fixed by changing the chars-per-token
+constant, per ruling R10 — the spec fixes that approximation at 4 chars/token, and a constant
+chosen to clear this session's error would be fitting to the validation target, not evidence of a
+generally correct ratio (the earlier grid search was non-monotonic across divisors, which itself
+shows a single global constant doesn't explain the gap).
 
-1. **Missed non-tool-result content.** 46 `user`-entry text blocks in this session are not tool
-   results — mostly `isMeta: true` injected content (environment/system reminders, deferred-tool
-   listings, skill listings) plus a handful of plain typed turns. These totaled 158,832 chars
-   (~39,700 tokens at 4 chars/token) that the old calibration silently dropped. This content still
-   becomes context for later turns, so it needs to be measured, but its raw text must never be
-   printed anywhere (it can include arbitrary prior conversation/system content).
+1. **Fixed: missed non-tool-result content.** 46-48 `user`-entry text blocks in this session are
+   not tool results — mostly `isMeta: true` injected content (environment/system reminders,
+   deferred-tool listings, skill listings) plus a handful of plain typed turns. This totals roughly
+   40,000-160,000 chars across runs (the session is live and growing) that the old calibration
+   silently dropped. This content still becomes context for later turns, so it is now counted as
+   its own `context:user` family bucket; its raw text is never printed or stored, only its
+   character count.
 
-2. **Wrong chars-per-token ratio for this content mix.** Even after adding that bucket, restricting
-   calibration to turns whose new content was *only* tool results (no user text, no images) and
-   solving for the implied ratio gave **~1.5 chars/token**, not the ~4 chars/token the old constant
-   assumed. That mix is dominated by `Bash` output (167,200 of 201,369 chars in those clean turns —
-   83%): CLI stdout, file paths, JSON, table borders and other punctuation/whitespace-heavy text
-   tokenizes far less efficiently than English prose. Solving the same way across the *whole*
-   session (tool-result chars + the new user-content bucket, backing out real per-image pixel
-   tokens) gave an implied ratio of ~1.85; a small grid search around it found:
-
-   | divisor (chars/token) | error vs recorded |
-   | --- | --- |
-   | 4 (old) | 50.6% |
-   | 3.5 | 44.3% |
-   | 3 | 36.0% |
-   | 2.5 | 24.4% |
-   | **2 (chosen)** | **6.95%** |
-   | 1.5 | 22.1% |
-
-   2 chars/token was the best round number clearly inside the 15% budget without being the exact
-   least-squares fit to this one session (which would be overfitting to a single transcript).
+2. **Found, not "fixed": tool output tokenizes denser than the spec's 4 chars/token.**
+   Restricting calibration to turns whose new content is *only* tool results (no `context:user`
+   content, no images) and solving for the implied ratio gives **~1.5 chars/token** on this
+   session, not ~4. That mix is dominated by `Bash` output: CLI stdout, file paths, JSON, table
+   borders and other punctuation/whitespace-heavy text tokenizes far less efficiently than English
+   prose. This is now reported as a separate, informational `impliedCharsPerToken` figure (see
+   below) computed independently from the estimate — it never rescales `estimated` or `errorPct`.
 
 ### Changes made (TDD)
 
-- `test/analyze-transcript.test.mjs`: added two failing tests first (confirmed failing, then
-  implemented) —
-  - non-tool-result text in a `user` entry is captured as a `context:user`-family pseudo-result,
-    attributed to the turn it arrives after;
-  - such content arriving before any completed turn is dropped, not attributed to a negative turn.
-- `analyze/transcript.mjs`: `parseTranscript` now also emits a `context:user` entry (name only —
-  `toolFamily('context:user')` passes it through unchanged) carrying `textChars` for non-tool-result
-  text blocks in `user` entries, skipping content before the first completed turn. No transcript
-  text is stored or logged — only the character count.
-- `test/analyze-cost.test.mjs`: added a failing test pinning `resultTokens({textChars: 10, ...})`
-  to `{text: 5, ...}` (confirmed failing at the old constant), then updated the two existing
-  fixture-dependent tests' expected numbers (`chrome.directTokens` 2100→2200,
-  `bash.directTokens` 200→400, calibration `estimated` 2300→2600) to match the corrected divisor.
-- `analyze/cost.mjs`: replaced the hardcoded `/ 4` in `resultTokens` with an exported
-  `CHARS_PER_TOKEN = 2` constant, documented with the evidence above.
+- `test/analyze-transcript.test.mjs`: two tests (unchanged from the first pass, kept per R10) —
+  non-tool-result text in a `user` entry becomes a `context:user`-family pseudo-result attributed
+  to the turn it arrives after; such content before any completed turn is dropped, not attributed
+  to a negative turn.
+- `analyze/transcript.mjs`: `parseTranscript` emits that `context:user` entry (name and char count
+  only — `toolFamily('context:user')` passes it through unchanged).
+- `analyze/cost.mjs`: `CHARS_PER_TOKEN` **reverted to 4** (the first pass had changed it to 2; R10
+  rejected that as fitting the validation target rather than following the spec's fixed
+  approximation). `resultTokens`'s pinned test and the two fixture-dependent tests were restored to
+  their original expected numbers.
+- `test/analyze-cost.test.mjs`: added two new failing-first tests for `impliedCharsPerToken` —
+  one with a synthetic multi-turn fixture verifying that a turn whose arriving content mixes a tool
+  result with `context:user` content is excluded from both the numerator and denominator, and one
+  verifying `null` ("n/a") when no turn qualifies. Both were confirmed RED (asserting against the
+  not-yet-implemented field) before implementing.
+- `analyze/cost.mjs`: `costBreakdown`'s calibration now also reports `impliedCharsPerToken`
+  (`impliedTextChars / impliedDenominator`, or `null`), computed only over turns whose entire
+  arriving content is tool results, with the denominator being that turn's recorded growth minus
+  its tool results' image-token estimate. This is purely observational and is never used to compute
+  `estimated`.
+- `analyze/session-cost.mjs`: prints the implied figure next to the calibration line in both the
+  markdown and `--json` output (`"n/a"` in markdown when `null`).
 
-`npm test`: **38/38 pass** after the change (was 35/35 before this task; +2 new transcript tests,
-+1 new cost test).
+`npm test`: **39/39 pass** (35 pre-existing + the 2 `context:user` transcript tests + 2 new
+`impliedCharsPerToken` tests).
 
 ### Family table for this session (tool families, counts and token columns only)
 
 | tool family | calls | images | direct tokens | carry tokens |
 | --- | --- | --- | --- | --- |
-| Bash | 138 | 0 | 84,311 | 15,263,969 |
-| context:user | 46 | 0 | 79,428 | 4,796,561 |
-| claude-in-chrome | 36 | 21 | 17,880 | 2,649,849 |
-| Agent | 23 | 0 | 12,144 | 543,840 |
-| Read | 2 | 2 | 1,032 | 180,615 |
-| Write | 11 | 0 | 903 | 160,034 |
-| TaskStop | 3 | 0 | 672 | 115,584 |
-| AskUserQuestion | 3 | 0 | 267 | 42,876 |
-| Edit | 1 | 0 | 82 | 16,892 |
-| SendMessage | 5 | 0 | 410 | 10,578 |
-| Skill | 3 | 0 | 70 | 6,895 |
+| Bash | 140 | 0 | 42,233 | 7,848,201 |
+| context:user | 48 | 0 | 42,552 | 2,603,287 |
+| claude-in-chrome | 36 | 21 | 14,601 | 2,223,367 |
+| Agent | 24 | 0 | 6,336 | 302,808 |
+| Read | 2 | 2 | 1,032 | 185,775 |
+| Write | 11 | 0 | 455 | 82,941 |
+| TaskStop | 3 | 0 | 336 | 59,472 |
+| AskUserQuestion | 3 | 0 | 134 | 22,226 |
+| Edit | 1 | 0 | 41 | 8,651 |
+| SendMessage | 6 | 0 | 246 | 6,314 |
+| Skill | 3 | 0 | 36 | 3,731 |
 | ToolSearch | 5 | 0 | 0 | 0 |
 
-### Calibration
+### Calibration (with `context:user` counted at 4 chars/token)
 
-- **Before:** estimated 65,106 vs recorded 171,744 tokens of new context — **62.1% off**.
-- **After:** estimated 197,199 vs recorded 211,857 tokens of new context — **6.9% off**.
-- **Meets the spec's 15% criterion.**
+- Estimated 108,002 vs recorded 217,815 tokens of new context — **50.4% off**.
+- Implied chars/token (tool-result-only turns): **1.53**.
+- **Does not meet the spec's ≤15% criterion.**
 
-Note: this transcript is the live, growing session running this task, so absolute totals will
-differ slightly between runs; the reported numbers above are from the single run quoted, and the
-error stayed within 15% on that run.
+The remaining gap is explained by cause 2 above: tool/CLI output (this session is dominated by
+`Bash`) tokenizes at roughly 1.5 chars/token, not the 4 chars/token the spec's approximation uses,
+so the estimate under-counts by close to half. Per R10 this is reported honestly rather than
+papered over with a fitted constant; fixing it for real would need either a per-family ratio backed
+by evidence from many sessions (not one), or a tokenizer-based estimate instead of a chars-per-token
+approximation — both out of scope for this validation pass.
+
+Note: this transcript is the live, growing session running this task, so absolute totals differ
+between runs; the numbers above are from the single run quoted.
 
 ## Step 3: Plugin install smoke test
 

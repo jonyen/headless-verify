@@ -4,12 +4,10 @@ import { toolFamily } from './transcript.mjs';
 
 const UNKNOWN_IMAGE_TOKENS = 1600;
 
-// Calibrated against the originating headless-verify session (docs/validation.md): tool
-// output (Bash, Agent, claude-in-chrome, etc.) tokenizes far denser than English prose —
-// short, punctuation- and path-heavy lines average close to 2 chars/token there, not the
-// ~4 chars/token that fits plain text. A 4 chars/token model under-estimated that session's
-// recorded context growth by roughly half.
-export const CHARS_PER_TOKEN = 2;
+// The spec fixes this approximation at ~4 chars/token for plain text. See docs/validation.md
+// for the calibration's `impliedCharsPerToken` figure, which measures the actual ratio for
+// tool-result-only turns without feeding back into this estimate.
+export const CHARS_PER_TOKEN = 4;
 
 export function resultTokens(result) {
   const text = Math.ceil(result.textChars / CHARS_PER_TOKEN);
@@ -43,11 +41,29 @@ export function costBreakdown({ results, turns }) {
 
   let estimated = 0;
   let recorded = 0;
+  // Empirical ratio, kept separate from `estimated`/`recorded`: it never feeds back into the
+  // estimate above, it only reports what the recorded data implies. Restricted to turns whose
+  // arriving content is solely tool results (no context:user content mixed in), so that
+  // non-tool-result text (already a separate, unrelated char count) can't distort it.
+  let impliedTextChars = 0;
+  let impliedDenominator = 0;
   for (let k = 1; k < turns.length; k++) {
     const arriving = results.filter((r) => r.turn === k - 1);
     if (arriving.length === 0) continue;
     estimated += arriving.reduce((sum, r) => sum + resultTokens(r).total, 0);
-    recorded += context(turns[k].usage) - context(turns[k - 1].usage) - turns[k - 1].usage.output;
+    const turnRecorded = context(turns[k].usage) - context(turns[k - 1].usage) - turns[k - 1].usage.output;
+    recorded += turnRecorded;
+
+    const onlyToolResults = arriving.every((r) => r.name !== 'context:user');
+    if (onlyToolResults) {
+      const textChars = arriving.reduce((sum, r) => sum + r.textChars, 0);
+      const imageTokens = arriving.reduce((sum, r) => sum + resultTokens(r).image, 0);
+      const denom = turnRecorded - imageTokens;
+      if (denom > 0) {
+        impliedTextChars += textChars;
+        impliedDenominator += denom;
+      }
+    }
   }
 
   return {
@@ -61,6 +77,9 @@ export function costBreakdown({ results, turns }) {
       estimated,
       recorded,
       errorPct: recorded ? (Math.abs(estimated - recorded) / recorded) * 100 : 0,
+      impliedCharsPerToken: impliedDenominator > 0 ? impliedTextChars / impliedDenominator : null,
+      impliedTextChars,
+      impliedDenominator,
     },
   };
 }

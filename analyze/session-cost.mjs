@@ -56,17 +56,22 @@ const combined = reports.reduce(
     acc.billedInput += r.totals.billedInput;
     acc.estimated += r.calibration.estimated;
     acc.recorded += r.calibration.recorded;
+    acc.impliedTextChars += r.calibration.impliedTextChars;
+    acc.impliedDenominator += r.calibration.impliedDenominator;
     return acc;
   },
-  { families: new Map(), billedInput: 0, estimated: 0, recorded: 0 },
+  { families: new Map(), billedInput: 0, estimated: 0, recorded: 0, impliedTextChars: 0, impliedDenominator: 0 },
 );
 const families = [...combined.families.values()]
   .map((f) => ({ ...f, shareOfInput: combined.billedInput ? (f.directTokens + f.carryTokens) / combined.billedInput : 0 }))
   .sort((a, b) => b.directTokens + b.carryTokens - (a.directTokens + a.carryTokens));
 const errorPct = combined.recorded ? (Math.abs(combined.estimated - combined.recorded) / combined.recorded) * 100 : 0;
+// Empirical ratio for tool-result-only turns; reported alongside the calibration, never fed
+// back into `estimated`.
+const impliedCharsPerToken = combined.impliedDenominator > 0 ? combined.impliedTextChars / combined.impliedDenominator : null;
 
 if (json) {
-  console.log(JSON.stringify({ sessions: files.length, malformed, billedInput: combined.billedInput, families, calibration: { estimated: combined.estimated, recorded: combined.recorded, errorPct } }, null, 2));
+  console.log(JSON.stringify({ sessions: files.length, malformed, billedInput: combined.billedInput, families, calibration: { estimated: combined.estimated, recorded: combined.recorded, errorPct, impliedCharsPerToken } }, null, 2));
 } else {
   const fmt = (n) => Math.round(n).toLocaleString('en-US');
   console.log(`Sessions: ${files.length} · billed input tokens: ${fmt(combined.billedInput)}${malformed ? ` · skipped ${malformed} malformed lines` : ''}\n`);
@@ -75,5 +80,6 @@ if (json) {
   for (const f of families) {
     console.log(`| ${f.family} | ${f.calls} | ${f.images} | ${fmt(f.directTokens)} | ${fmt(f.carryTokens)} | ${(f.shareOfInput * 100).toFixed(1)}% |`);
   }
-  console.log(`\nCalibration: estimated ${fmt(combined.estimated)} vs recorded ${fmt(combined.recorded)} tokens of new context (${errorPct.toFixed(1)}% off)`);
+  const impliedStr = impliedCharsPerToken === null ? 'n/a' : impliedCharsPerToken.toFixed(2);
+  console.log(`\nCalibration: estimated ${fmt(combined.estimated)} vs recorded ${fmt(combined.recorded)} tokens of new context (${errorPct.toFixed(1)}% off) · implied chars/token (tool-result-only turns): ${impliedStr}`);
 }
