@@ -17,7 +17,7 @@ pass (see Step 2).
 Command:
 
 ```
-node analyze/session-cost.mjs ~/.claude/projects/-Users-jonyen-Projects/c34456c0-8c79-4ce9-82d6-bb174c64936b.jsonl
+node analyze/session-cost.mjs ~/.claude/projects/<project>/<session>.jsonl
 ```
 
 ### Cause of the gap
@@ -102,7 +102,7 @@ shows a single global constant doesn't explain the gap).
 - Implied chars/token (tool-result-only turns): **1.53**.
 - **Does not meet the spec's ≤15% criterion.**
 
-The remaining gap is explained by cause 2 above: tool/CLI output (this session is dominated by
+The remaining gap is likely explained by cause 2 above: tool/CLI output (this session is dominated by
 `Bash`) tokenizes at roughly 1.5 chars/token, not the 4 chars/token the spec's approximation uses,
 so the estimate under-counts by close to half. Per R10 this is reported honestly rather than
 papered over with a fitted constant; fixing it for real would need either a per-family ratio backed
@@ -129,8 +129,12 @@ Output (skill names only):
 - `webapp-testing`
 ```
 
-The plugin's skill triggered and is named correctly (`headless-verify:verifying-web-apps-headlessly`),
-matching the spec's expectation. Cost: capped at `--max-budget-usd 0.10`; with `--model haiku` and
+The plugin's skill loaded and is listed under the correct name
+(`headless-verify:verifying-web-apps-headlessly`). This probe only asked Claude to name its skills;
+it did not show the skill **triggering** on a real verification request, so the spec's triggering
+criterion is **not yet verified**. The benchmark's headless-arm runs will show whether it triggers.
+
+Cost: capped at `--max-budget-usd 0.10`; with `--model haiku` and
 a two-sentence prompt the actual spend is a small fraction of that cap (no separate cost line was
 printed by this invocation, and per the "one attempt" instruction the command was not re-run with
 different flags to extract an exact figure).

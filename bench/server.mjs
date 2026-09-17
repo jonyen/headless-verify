@@ -34,11 +34,40 @@ function renderStylesCss(template, variant) {
   return template.replace('{{TOOLBAR_WRAP}}', variant.toolbarWrap);
 }
 
+// A single `bytes=` range → [start, end] inclusive, or null when unsatisfiable
+// (start past the end, end beyond the file, start after end, empty suffix).
+function parseRange(first, last, size) {
+  let start;
+  let end;
+  if (first === '' && last === '') return null;
+  if (first === '') {
+    const suffix = Number(last);
+    if (suffix === 0) return null;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(first);
+    end = last === '' ? size - 1 : Number(last);
+  }
+  if (start >= size || end >= size || start > end) return null;
+  return [start, end];
+}
+
 export async function startFixture() {
   const tokens = { ok: randomBytes(4).toString('hex'), bug: randomBytes(4).toString('hex') };
   const tokenToVariant = new Map(Object.entries(tokens).map(([name, token]) => [token, name]));
 
   const server = http.createServer(async (req, res) => {
+    try {
+      await handle(req, res);
+    } catch (err) {
+      console.error(`fixture server error: ${err?.message ?? err}`);
+      if (!res.headersSent) res.writeHead(500);
+      res.end();
+    }
+  });
+
+  async function handle(req, res) {
     const pathname = new URL(req.url, 'http://x').pathname;
     const match = /^\/s\/([0-9a-f]+)(\/.*)?$/.exec(pathname);
     if (!match) return res.writeHead(404).end();
@@ -69,10 +98,13 @@ export async function startFixture() {
       return res.writeHead(404).end();
     }
     const type = types[extname(file)] ?? 'application/octet-stream';
-    const range = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? '');
-    if (range) {
-      const start = range[1] ? Number(range[1]) : 0;
-      const end = range[2] ? Number(range[2]) : info.size - 1;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+    if (req.headers.range) {
+      const bounds = range && parseRange(range[1], range[2], info.size);
+      if (!bounds) {
+        return res.writeHead(416, { 'content-range': `bytes */${info.size}` }).end();
+      }
+      const [start, end] = bounds;
       res.writeHead(206, {
         'content-type': type,
         'content-range': `bytes ${start}-${end}/${info.size}`,
@@ -83,11 +115,10 @@ export async function startFixture() {
     }
     res.writeHead(200, { 'content-type': type, 'content-length': info.size, 'accept-ranges': 'bytes' });
     createReadStream(file).pipe(res);
-  });
+  }
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   return {
-    url: `http://127.0.0.1:${port}/`,
     urlFor: (variant) => `http://127.0.0.1:${port}/s/${tokens[variant]}/`,
     close: () => new Promise((r) => server.close(r)),
   };

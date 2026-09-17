@@ -55,19 +55,30 @@ Reports calls, images, direct tokens and carry tokens (results re-read on later 
 family, plus a calibration line comparing its estimates with the usage recorded in the
 transcript. It reads local files only and never prints tool-result content.
 
+The estimates are not yet calibrated: on a tool-output-heavy session they currently come to about
+half of the recorded usage (tool output implies ~1.5 chars/token, against the fixed 4 chars/token
+the estimate uses), so treat the numbers as a lower bound; see [docs/validation.md](docs/validation.md).
+
 ## Run the benchmark
 
 ```sh
 npm install
 node bench/run.mjs --runs 5        # asks before spending; --runs 1 for a cheap trial
-node bench/report.mjs results/<file>.json --readme
+node bench/report.mjs results/<date>-<time>-<model>.json --readme
 ```
 
 Five tasks against a bundled fixture app, each with a working and a broken version of each
 widget, served at URLs that don't reveal which. Every run is a fresh `claude -p` session. The
 *browser* arm has claude-in-chrome and no Bash; the *headless* arm has Bash and this plugin and
-no claude-in-chrome. Runs are interleaved, capped with `--max-budget-usd`, and failures count
-against their arm. See
+no claude-in-chrome. Both arms run with `--permission-mode bypassPermissions` (needed for
+unattended runs) inside a throwaway temp working directory, with only project setting sources and
+`--strict-mcp-config`. The headless arm loads a staged, plugin-only copy of this repo from a temp
+directory, so it cannot browse the benchmark's own sources; runs whose tool inputs mention them
+anyway are counted as leak suspects in the results. Both arms can still read the served page's
+source, so part of any saving may come from reading code rather than running it. Runs are
+interleaved, capped with `--max-budget-usd` and a wall-clock `--timeout-min` (default 10), and
+failures and timeouts count against their arm. `report.mjs` writes per-arm IQRs next to the
+results file as `<file>.summary.json`. See
 [the design spec](docs/superpowers/specs/2026-09-16-headless-verify-design.md) for the method.
 
 ## Develop

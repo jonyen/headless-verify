@@ -75,3 +75,32 @@ test('served content does not leak which variant is served', async () => {
     }
   }
 });
+
+test('startFixture exposes only per-variant URLs, not the 404ing server root', () => {
+  assert.deepEqual(Object.keys(fixture).sort(), ['close', 'urlFor']);
+});
+
+test('video Range requests are validated', async () => {
+  const clip = new URL('clip.mp4', fixture.urlFor('ok'));
+  const full = await fetch(clip);
+  const size = Number(full.headers.get('content-length'));
+  await full.arrayBuffer();
+  assert.ok(size > 0);
+
+  const part = await fetch(clip, { headers: { range: 'bytes=0-9' } });
+  assert.equal(part.status, 206);
+  assert.equal(part.headers.get('content-range'), `bytes 0-9/${size}`);
+  assert.equal((await part.arrayBuffer()).byteLength, 10);
+
+  const tail = await fetch(clip, { headers: { range: 'bytes=-10' } });
+  assert.equal(tail.status, 206);
+  assert.equal(tail.headers.get('content-range'), `bytes ${size - 10}-${size - 1}/${size}`);
+  await tail.arrayBuffer();
+
+  for (const range of [`bytes=${size}-`, `bytes=0-${size}`, 'bytes=20-10', 'bytes=-0']) {
+    const res = await fetch(clip, { headers: { range } });
+    assert.equal(res.status, 416, range);
+    assert.equal(res.headers.get('content-range'), `bytes */${size}`, range);
+    await res.arrayBuffer();
+  }
+});
