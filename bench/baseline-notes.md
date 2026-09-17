@@ -19,5 +19,17 @@ sonnet, 2026-09-16):
 
 ## GREEN: with the skill
 
-Pending — the controller runs this after the skill is committed and will fill in this
-section.
+From the controller's recorded GREEN run (captions task, bug variant, with the skill;
+subagent, sonnet, 2026-09-16):
+
+- Tools: Bash 3 (curl page HTML, curl app.js, locate helper), Write 1 (headless check script
+  from the media recipe), script run 1 (counted in harness tool uses); Read for the two skill
+  files
+- Browser-automation tools: 0; screenshots: 0
+- Dead ends: 0
+- Answer: works=false, cause correct (listener attached to null before the video is appended)
+- Harness usage: 51,172 subagent tokens (including reading SKILL.md and reference.md), 8 tool
+  uses, 59 s
+
+Single run each way: RED 60,360 tokens / 17 tool uses / 104 s / 1 screenshot; GREEN 51,172 / 8
+/ 59 s / 0. Not a benchmark result.
