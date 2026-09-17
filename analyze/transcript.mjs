@@ -19,6 +19,8 @@ export function parseTranscript(text) {
   const results = [];
   const turns = [];
   const turnByMessageId = new Map();
+  // Index of the first turn after each explicit compaction marker (no content is kept).
+  const compactBoundaries = [];
   let malformed = 0;
 
   for (const line of text.split('\n')) {
@@ -31,6 +33,10 @@ export function parseTranscript(text) {
       continue;
     }
     const message = entry.message ?? {};
+    if (entry.type === 'system' && entry.subtype === 'compact_boundary') {
+      if (compactBoundaries.at(-1) !== turns.length) compactBoundaries.push(turns.length);
+      continue;
+    }
     if (entry.type === 'assistant') {
       const messageId = message.id;
       let turnIndex = turns.length - 1;
@@ -95,5 +101,5 @@ export function parseTranscript(text) {
       }
     }
   }
-  return { calls, results, turns, malformed };
+  return { calls, results, turns, compactBoundaries, malformed };
 }

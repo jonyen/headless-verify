@@ -5,6 +5,12 @@
 // char for tool-result text and for context:user text. Least squares on the 2×2 normal
 // equations; a class that has too little data, or fits to a non-positive coefficient, is held
 // at the spec's fixed 4 chars/token and the other class is refit alone.
+//
+// Turns that break the model are excluded before fitting and before scoring: a context reset
+// (recorded context below the previous turn's, or an explicit compact_boundary marker), the
+// turn right after it (its growth is measured from a reset base), and turns with growth ≤ 0.
+// The accuracy criterion is the median absolute per-turn error on held-out turns; the summed
+// holdout error is secondary, because totals can match while individual turns are far off.
 
 import { resultTokens } from './cost.mjs';
 
@@ -16,8 +22,13 @@ export const FOLDS = 5;
 const FIXED = 1 / FIXED_CHARS_PER_TOKEN;
 const context = (u) => u.input + u.cacheCreation + u.cacheRead;
 
+export const CRITERION = 'medianTurnHoldoutErrorPct';
+
 // One observation per turn k ≥ 1 that received content requested/arriving after turn k−1.
-export function buildObservations({ results, turns }) {
+// `reset` is 'drop' for a context-reset turn, 'after' for the turn following one, else null.
+export function buildObservations({ results, turns, compactBoundaries = [] }) {
+  const markers = new Set(compactBoundaries);
+  const isReset = (k) => k > 0 && k < turns.length && (context(turns[k].usage) < context(turns[k - 1].usage) || markers.has(k));
   const obs = [];
   for (let k = 1; k < turns.length; k++) {
     const arriving = results.filter((r) => r.turn === k - 1);
@@ -31,7 +42,10 @@ export function buildObservations({ results, turns }) {
       imageTokens += resultTokens(r).image;
     }
     const recorded = context(turns[k].usage) - context(turns[k - 1].usage) - turns[k - 1].usage.output;
-    obs.push({ turn: k, recorded, toolChars, contextChars, imageTokens });
+    const reset = isReset(k) ? 'drop' : isReset(k - 1) ? 'after' : null;
+    const o = { turn: k, recorded, toolChars, contextChars, imageTokens, reset };
+    if (markers.has(k)) Object.defineProperty(o, 'compactMarker', { value: true, enumerable: false });
+    obs.push(o);
   }
   return obs;
 }
@@ -91,15 +105,28 @@ function median(values) {
 }
 
 export function fitRatios(observations) {
-  const usable = observations.filter((o) => o.recorded > 0);
-  const base = { observations: usable.length, dropped: observations.length - usable.length };
+  const excluded = { contextDrop: 0, afterDrop: 0, nonPositiveGrowth: 0 };
+  const usable = [];
+  for (const o of observations) {
+    if (o.reset === 'drop') excluded.contextDrop += 1;
+    else if (o.reset === 'after') excluded.afterDrop += 1;
+    else if (!(o.recorded > 0)) excluded.nonPositiveGrowth += 1;
+    else usable.push(o);
+  }
+  const base = {
+    criterion: CRITERION,
+    observations: usable.length,
+    dropped: excluded.nonPositiveGrowth,
+    excluded,
+    compactMarkers: observations.filter((o) => o.compactMarker).length,
+  };
   const fixed = (reason) => ({
     method: 'fixed',
     toolCharsPerToken: FIXED_CHARS_PER_TOKEN,
     contextCharsPerToken: FIXED_CHARS_PER_TOKEN,
     ...base,
-    holdoutErrorPct: null,
-    medianTurnErrorPct: null,
+    medianTurnHoldoutErrorPct: null,
+    summedHoldoutErrorPct: null,
     holdoutPredicted: null,
     holdoutRecorded: null,
     reason,
@@ -125,7 +152,7 @@ export function fitRatios(observations) {
       const p = predict(o, coef);
       predicted += p;
       recorded += o.recorded;
-      turnErrors.push((Math.abs(p - o.recorded) / o.recorded) * 100);
+      turnErrors.push({ recorded: o.recorded, errorPct: (Math.abs(p - o.recorded) / o.recorded) * 100 });
     }
   }
 
@@ -135,8 +162,9 @@ export function fitRatios(observations) {
     contextCharsPerToken: 1 / all.b,
     fittedClasses: all.fitted,
     ...base,
-    holdoutErrorPct: (Math.abs(predicted - recorded) / recorded) * 100,
-    medianTurnErrorPct: median(turnErrors),
+    medianTurnHoldoutErrorPct: median(turnErrors.map((t) => t.errorPct)),
+    summedHoldoutErrorPct: (Math.abs(predicted - recorded) / recorded) * 100,
+    holdoutTurns: turnErrors,
     holdoutPredicted: predicted,
     holdoutRecorded: recorded,
   };

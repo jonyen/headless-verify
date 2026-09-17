@@ -39,8 +39,71 @@ test('fitRatios recovers known tool and context ratios within 5% with low holdou
   assert.ok(within(fit.contextCharsPerToken, 3.5, 5), `context ${fit.contextCharsPerToken}`);
   assert.equal(fit.observations, 100);
   assert.equal(fit.dropped, 0);
-  assert.ok(fit.holdoutErrorPct < 3, `holdout ${fit.holdoutErrorPct}`);
-  assert.ok(fit.medianTurnErrorPct < 5, `median ${fit.medianTurnErrorPct}`);
+  assert.ok(fit.summedHoldoutErrorPct < 3, `summed ${fit.summedHoldoutErrorPct}`);
+  assert.ok(fit.medianTurnHoldoutErrorPct < 5, `median ${fit.medianTurnHoldoutErrorPct}`);
+});
+
+test('the criterion is the median per-turn holdout error, and there are no overhead fields', () => {
+  const fit = fitRatios(synthetic({ noise: 0.1 }));
+  assert.equal(fit.criterion, 'medianTurnHoldoutErrorPct');
+  assert.equal(typeof fit.medianTurnHoldoutErrorPct, 'number');
+  assert.equal(fit[fit.criterion], fit.medianTurnHoldoutErrorPct);
+  assert.equal(typeof fit.summedHoldoutErrorPct, 'number');
+  assert.notEqual(fit.medianTurnHoldoutErrorPct, fit.summedHoldoutErrorPct);
+  assert.equal('holdoutErrorPct' in fit, false);
+  for (const key of Object.keys(fit)) assert.doesNotMatch(key, /overhead/i);
+  const fixed = fitRatios(synthetic({ n: 5 }));
+  assert.equal(fixed.criterion, 'medianTurnHoldoutErrorPct');
+  assert.equal(fixed.medianTurnHoldoutErrorPct, null);
+  for (const key of Object.keys(fixed)) assert.doesNotMatch(key, /overhead/i);
+});
+
+// Synthetic transcript: every turn gets tool text at 1.5 chars/token; context resets after turn `dropAt`.
+function syntheticTranscript({ n = 80, dropAt = 40, marker = false } = {}) {
+  const r = rng(11);
+  const turns = [];
+  const results = [];
+  let ctx = 5000;
+  for (let k = 0; k < n; k++) {
+    if (k > 0) {
+      const chars = results.filter((x) => x.turn === k - 1).reduce((s, x) => s + x.textChars, 0);
+      ctx += turns[k - 1].usage.output + Math.round(chars / 1.5);
+      if (k === dropAt) ctx = 3000; // compaction: context resets below the previous turn
+    }
+    turns.push({ index: k, usage: { input: 10, cacheCreation: 0, cacheRead: ctx - 10, output: 50 } });
+    results.push({ name: 'Bash', turn: k, textChars: Math.round(300 + r() * 3000), images: [] });
+  }
+  return { turns, results, compactBoundaries: marker ? [dropAt] : [] };
+}
+
+test('a context drop excludes the drop turn and the next turn, counted separately', () => {
+  const obs = buildObservations(syntheticTranscript());
+  const fit = fitRatios(obs);
+  assert.equal(fit.method, 'fitted');
+  assert.deepEqual(fit.excluded, { contextDrop: 1, afterDrop: 1, nonPositiveGrowth: 0 });
+  assert.equal(fit.observations, obs.length - 2);
+  assert.ok(within(fit.toolCharsPerToken, 1.5, 5), `tool ${fit.toolCharsPerToken}`);
+  assert.ok(fit.medianTurnHoldoutErrorPct < 2, `median ${fit.medianTurnHoldoutErrorPct}`);
+});
+
+test('an explicit compact marker flags a reset even when usage does not drop', () => {
+  const t = syntheticTranscript({ dropAt: 1000, marker: true });
+  t.compactBoundaries = [30];
+  const fit = fitRatios(buildObservations(t));
+  assert.equal(fit.excluded.contextDrop, 1);
+  assert.equal(fit.excluded.afterDrop, 1);
+  assert.equal(fit.compactMarkers, 1);
+});
+
+test('parseTranscript records compact_boundary positions without content', () => {
+  const lines = [
+    { type: 'assistant', message: { id: 'a', usage: { input_tokens: 1, output_tokens: 1 }, content: [] } },
+    { type: 'system', subtype: 'compact_boundary' },
+    { type: 'user', isCompactSummary: true, message: { content: 'summary' } },
+    { type: 'assistant', message: { id: 'b', usage: { input_tokens: 1, output_tokens: 1 }, content: [] } },
+  ];
+  const t = parseTranscript(lines.map((l) => JSON.stringify(l)).join('\n'));
+  assert.deepEqual(t.compactBoundaries, [1]);
 });
 
 test('a class with too little data stays fixed at 4 chars/token', () => {
@@ -61,6 +124,7 @@ test('observations with zero or negative recorded growth are dropped and counted
   obs[20] = { ...obs[20], recorded: -1 };
   const fit = fitRatios(obs);
   assert.equal(fit.dropped, 3);
+  assert.equal(fit.excluded.nonPositiveGrowth, 3);
   assert.equal(fit.observations, 97);
   assert.ok(within(fit.toolCharsPerToken, 1.5, 5));
 });
@@ -105,8 +169,8 @@ test('buildObservations splits arriving chars into tool, context and image token
   const obs = buildObservations(transcript);
   // Fixture: turn1 growth 2100 = 400 chars + 2000 image tokens; turn2 growth 200 = 800 chars.
   assert.deepEqual(obs, [
-    { turn: 1, recorded: 2100, toolChars: 400, contextChars: 0, imageTokens: 2000 },
-    { turn: 2, recorded: 200, toolChars: 800, contextChars: 0, imageTokens: 0 },
+    { turn: 1, recorded: 2100, toolChars: 400, contextChars: 0, imageTokens: 2000, reset: null },
+    { turn: 2, recorded: 200, toolChars: 800, contextChars: 0, imageTokens: 0, reset: null },
   ]);
 });
 
@@ -129,7 +193,9 @@ test('CLI --fixed reproduces the fixed-ratio numbers on the fixture', async () =
 test('CLI reports the ratio method and never prints tool-result text', async () => {
   const { stdout } = await run(fixture);
   assert.match(stdout, /Ratios: fixed \(.*20.*\)/);
-  assert.match(stdout, /observations 2, dropped 0/);
+  assert.match(stdout, /observations 2 · excluded: context drop 0, after drop 0, growth ≤ 0: 0/);
+  assert.match(stdout, /median per-turn holdout error n\/a \(criterion\)/);
+  assert.doesNotMatch(stdout, /overhead/i);
   assert.doesNotMatch(stdout, /yyyy|xxxx|orphan/);
   const { stdout: out } = await run(fixture, '--json');
   assert.doesNotMatch(out, /yyyy|xxxx|orphan/);

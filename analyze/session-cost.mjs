@@ -2,8 +2,9 @@
 // Usage: node analyze/session-cost.mjs <session.jsonl | --all> [--since YYYY-MM-DD] [--json] [--fixed]
 // Reads Claude Code transcripts locally and reports token cost by tool family.
 // Per session, chars-per-token ratios are fitted from the transcript's recorded usage and
-// validated on held-out turns (analyze/fit.mjs); sessions with too little data, or --fixed,
-// use the spec's fixed 4 chars/token. Output never includes tool-result content.
+// validated by the median per-turn error on held-out turns (analyze/fit.mjs), after excluding
+// context resets and non-positive growth; sessions with too little data, or --fixed, use the
+// spec's fixed 4 chars/token. Output never includes tool-result content.
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -47,9 +48,13 @@ for (const file of files) {
   const transcript = parseTranscript(await readFile(file, 'utf8'));
   malformed += transcript.malformed;
   const observations = buildObservations(transcript);
-  const fit = forceFixed
-    ? { ...fitRatios([]), observations: observations.filter((o) => o.recorded > 0).length, dropped: observations.filter((o) => o.recorded <= 0).length, reason: '--fixed' }
-    : fitRatios(observations);
+  const fit = fitRatios(observations);
+  if (forceFixed) {
+    const { observations: n, dropped, excluded, compactMarkers } = fit;
+    Object.assign(fit, { ...fitRatios([]), observations: n, dropped, excluded, compactMarkers, reason: '--fixed' });
+    delete fit.fittedClasses;
+    delete fit.holdoutTurns;
+  }
   fits.push(fit);
   const ratios = fit.method === 'fitted' ? fit : FIXED_RATIOS;
   reports.push(costBreakdown(transcript, { ratios }));
@@ -86,10 +91,13 @@ const pick = (f) => ({
   method: f.method,
   toolCharsPerToken: f.toolCharsPerToken,
   contextCharsPerToken: f.contextCharsPerToken,
+  criterion: f.criterion,
+  medianTurnHoldoutErrorPct: f.medianTurnHoldoutErrorPct,
+  summedHoldoutErrorPct: f.summedHoldoutErrorPct,
   observations: f.observations,
   dropped: f.dropped,
-  holdoutErrorPct: f.holdoutErrorPct,
-  medianTurnErrorPct: f.medianTurnErrorPct,
+  excluded: f.excluded,
+  compactMarkers: f.compactMarkers,
   ...(f.fittedClasses ? { fittedClasses: f.fittedClasses } : {}),
   ...(f.reason ? { reason: f.reason } : {}),
 });
@@ -108,14 +116,17 @@ const ratios =
     : {
         fittedSessions: fitted.length,
         fixedSessions: fits.length - fitted.length,
-        observations: fits.reduce((s, f) => s + f.observations, 0),
-        dropped: fits.reduce((s, f) => s + f.dropped, 0),
-        pooledHoldoutErrorPct: pooledRecorded ? (Math.abs(pooledPredicted - pooledRecorded) / pooledRecorded) * 100 : null,
-        medianSessionHoldoutErrorPct: med(fitted.map((f) => f.holdoutErrorPct)),
-        medianSessionTurnErrorPct: med(fitted.map((f) => f.medianTurnErrorPct)),
+        criterion: 'medianSessionMedianTurnHoldoutErrorPct',
+        medianSessionMedianTurnHoldoutErrorPct: med(fitted.map((f) => f.medianTurnHoldoutErrorPct)),
+        sessionsMeeting15Pct: fitted.filter((f) => f.medianTurnHoldoutErrorPct <= 15).length,
+        pooledSummedHoldoutErrorPct: pooledRecorded ? (Math.abs(pooledPredicted - pooledRecorded) / pooledRecorded) * 100 : null,
         medianToolCharsPerToken: med(fitted.map((f) => f.toolCharsPerToken)),
         medianContextCharsPerToken: med(fitted.map((f) => f.contextCharsPerToken)),
-        sessionsMeetingHoldout15Pct: fitted.filter((f) => f.holdoutErrorPct <= 15).length,
+        observations: fits.reduce((s, f) => s + f.observations, 0),
+        dropped: fits.reduce((s, f) => s + f.dropped, 0),
+        excluded: Object.fromEntries(['contextDrop', 'afterDrop', 'nonPositiveGrowth'].map((k) => [k, fits.reduce((s, f) => s + f.excluded[k], 0)])),
+        compactMarkers: fits.reduce((s, f) => s + f.compactMarkers, 0),
+        perSession: files.map((file, i) => ({ session: file.split('/').pop().replace(/\.jsonl$/, ''), ...pick(fits[i]) })),
       };
 
 if (json) {
@@ -131,12 +142,14 @@ if (json) {
   const impliedStr = impliedCharsPerToken === null ? 'n/a' : impliedCharsPerToken.toFixed(2);
   const pct = (x) => (x === null ? 'n/a' : `${x.toFixed(1)}%`);
   const r2 = (x) => (x === null ? 'n/a' : x.toFixed(2));
+  const exc = (f) => `observations ${f.observations} · excluded: context drop ${f.excluded.contextDrop}, after drop ${f.excluded.afterDrop}, growth ≤ 0: ${f.excluded.nonPositiveGrowth}${f.compactMarkers ? ` (${f.compactMarkers} compact markers)` : ''}`;
   if (files.length === 1) {
     const f = ratios;
     const head = f.method === 'fitted' ? 'fitted' : `fixed (${f.reason})`;
-    console.log(`\nRatios: ${head} · tool ${r2(f.toolCharsPerToken)} chars/token · context ${r2(f.contextCharsPerToken)} chars/token · holdout error ${pct(f.holdoutErrorPct)} · median per-turn error ${pct(f.medianTurnErrorPct)} · observations ${f.observations}, dropped ${f.dropped}`);
+    console.log(`\nRatios: ${head} · tool ${r2(f.toolCharsPerToken)} chars/token · context ${r2(f.contextCharsPerToken)} chars/token · median per-turn holdout error ${pct(f.medianTurnHoldoutErrorPct)} (criterion) · summed holdout error ${pct(f.summedHoldoutErrorPct)} (secondary) · ${exc(f)}`);
   } else {
-    console.log(`\nRatios: fitted in ${ratios.fittedSessions} sessions, fixed in ${ratios.fixedSessions}${forceFixed ? ' (--fixed)' : ''} · median tool ${r2(ratios.medianToolCharsPerToken)} / context ${r2(ratios.medianContextCharsPerToken)} chars/token · pooled holdout error ${pct(ratios.pooledHoldoutErrorPct)} · median session holdout error ${pct(ratios.medianSessionHoldoutErrorPct)} · median per-turn error ${pct(ratios.medianSessionTurnErrorPct)} · ${ratios.sessionsMeetingHoldout15Pct} sessions ≤15% · observations ${ratios.observations}, dropped ${ratios.dropped}`);
+    console.log(`\nRatios: fitted in ${ratios.fittedSessions} sessions, fixed in ${ratios.fixedSessions}${forceFixed ? ' (--fixed)' : ''} · median tool ${r2(ratios.medianToolCharsPerToken)} / context ${r2(ratios.medianContextCharsPerToken)} chars/token · median of per-session median per-turn holdout error ${pct(ratios.medianSessionMedianTurnHoldoutErrorPct)} (criterion) · ${ratios.sessionsMeeting15Pct} of ${ratios.fittedSessions} fitted sessions ≤15% · pooled summed holdout error ${pct(ratios.pooledSummedHoldoutErrorPct)} (secondary) · ${exc(ratios)}`);
   }
+  console.log('Summed holdout error is secondary: totals can match while individual turns are far off.');
   console.log(`Fixed-ratio calibration: estimated ${fmt(combined.estimated)} vs recorded ${fmt(combined.recorded)} tokens of new context (${errorPct.toFixed(1)}% off) · implied chars/token (tool-result-only turns): ${impliedStr}`);
 }
