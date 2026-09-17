@@ -80,6 +80,52 @@ test('repeated assistant lines with the same message.id do not double-count turn
   assert.equal(t.turns[1].index, 1);
 });
 
+test('non-tool-result content in a user entry is captured as a context:user entry, attributed to the prior turn', () => {
+  const lines = [
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 0, output_tokens: 20 },
+        content: [{ type: 'tool_use', id: 'tA', name: 'Bash', input: {} }],
+      },
+    }),
+    JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'tA', content: 'ok' }, { type: 'text', text: 'a'.repeat(40) }] },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_2',
+        usage: { input_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 200, output_tokens: 10 },
+        content: [{ type: 'text', text: 'done' }],
+      },
+    }),
+  ];
+  const t = parseTranscript(lines.join('\n'));
+  const ctx = t.results.find((r) => r.name === 'context:user');
+  assert.ok(ctx, 'expected a context:user entry');
+  assert.equal(ctx.turn, 0);
+  assert.equal(ctx.textChars, 40);
+});
+
+test('non-tool-result user content before any completed turn is not attributed (no negative turn)', () => {
+  const lines = [
+    JSON.stringify({ type: 'user', message: { content: 'check the app' } }),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 0, output_tokens: 20 },
+        content: [{ type: 'text', text: 'ack' }],
+      },
+    }),
+  ];
+  const t = parseTranscript(lines.join('\n'));
+  assert.equal(t.results.filter((r) => r.name === 'context:user').length, 0);
+});
+
 test('toolFamily groups MCP tools by server', () => {
   assert.equal(toolFamily('mcp__claude-in-chrome__computer'), 'claude-in-chrome');
   assert.equal(toolFamily('mcp__XcodeBuildMCP__build_sim'), 'mcp:XcodeBuildMCP');

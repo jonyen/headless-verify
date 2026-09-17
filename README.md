@@ -6,9 +6,20 @@ includes a benchmark and a session analyzer that measure how many tokens that sa
 
 ## Install
 
+For local development, or until this repo publishes a marketplace manifest (see below), run it
+straight from a checkout:
+
 ```sh
-claude plugin install https://github.com/jonyen/headless-verify
+git clone https://github.com/jonyen/headless-verify
+claude --plugin-dir headless-verify -p "check that this works on localhost"
 ```
+
+`claude plugin install <plugin>` only installs from a marketplace you've already added
+(`plugin` or `plugin@marketplace`) — it does not take a bare GitHub URL. Installing straight
+from this repo would first need `claude plugin marketplace add https://github.com/jonyen/headless-verify`,
+which in turn needs a `.claude-plugin/marketplace.json` here; this repo does not ship one yet, so
+that two-step marketplace install does not currently work. `--plugin-dir` is the verified path
+(see `docs/validation.md`).
 
 Needs Node 20+ and Google Chrome. The first run installs `playwright-core` into
 `~/.cache/headless-verify` if it isn't already available.

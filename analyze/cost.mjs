@@ -4,8 +4,15 @@ import { toolFamily } from './transcript.mjs';
 
 const UNKNOWN_IMAGE_TOKENS = 1600;
 
+// Calibrated against the originating headless-verify session (docs/validation.md): tool
+// output (Bash, Agent, claude-in-chrome, etc.) tokenizes far denser than English prose —
+// short, punctuation- and path-heavy lines average close to 2 chars/token there, not the
+// ~4 chars/token that fits plain text. A 4 chars/token model under-estimated that session's
+// recorded context growth by roughly half.
+export const CHARS_PER_TOKEN = 2;
+
 export function resultTokens(result) {
-  const text = Math.ceil(result.textChars / 4);
+  const text = Math.ceil(result.textChars / CHARS_PER_TOKEN);
   const image = result.images.reduce(
     (sum, img) => sum + (img ? Math.round((img.width * img.height) / 750) : UNKNOWN_IMAGE_TOKENS),
     0,

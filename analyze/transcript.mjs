@@ -57,7 +57,15 @@ export function parseTranscript(text) {
         if (block.type === 'tool_use') calls.set(block.id, { name: block.name, turn: turnIndex });
       }
     } else if (entry.type === 'user') {
+      let otherTextChars = 0;
       for (const block of contentBlocks(message.content)) {
+        if (block.type === 'text') {
+          // Non-tool-result content arriving in a user entry (a real prompt, a system
+          // reminder, hook output, etc.). It still becomes context for later turns, so it
+          // is counted, but never printed and never mistaken for a tool result.
+          otherTextChars += (block.text ?? '').length;
+          continue;
+        }
         if (block.type !== 'tool_result') continue;
         const call = calls.get(block.tool_use_id);
         let textChars = 0;
@@ -72,6 +80,17 @@ export function parseTranscript(text) {
           turn: call?.turn ?? turns.length - 1,
           textChars,
           images,
+        });
+      }
+      // Only attribute to a turn that has actually completed; content before the first
+      // assistant turn is part of the initial prompt, not measurable "growth".
+      if (otherTextChars > 0 && turns.length > 0) {
+        results.push({
+          toolUseId: null,
+          name: 'context:user',
+          turn: turns.length - 1,
+          textChars: otherTextChars,
+          images: [],
         });
       }
     }
