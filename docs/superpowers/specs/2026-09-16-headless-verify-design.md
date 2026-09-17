@@ -127,7 +127,7 @@ five planted defects, each with an answer key:
 
 **Tasks.** Five prompt files, one per defect, each phrased as "check whether X works at
 {URL}; answer only with JSON `{"works": boolean, "cause": string}`". Prompts never hint at the
-defect. Both arms get byte-identical prompts.
+defect. Both arms get byte-identical prompts. Each task has a correct (`?variant=ok`) and a defective (`?variant=bug`) version of its widget. Runs are assigned variants by a seeded shuffle giving every task and arm an equal split, and the answer key is `works === (variant === 'ok')`, so always answering `false` scores 50%, not 100%.
 
 **Arms.** Same model, fresh `claude -p` session per run, `--no-session-persistence`, no user
 memory or project CLAUDE.md:
@@ -140,7 +140,7 @@ prompt cache. Each run is capped with `--max-budget-usd` so a runaway run cannot
 
 **Per-run record.** From `--output-format json`: input, output, cache-creation and cache-read
 tokens, `total_cost_usd`, duration, turns. The answer JSON is graded against the key (`works`
-must match; `cause` is recorded, not graded). Screenshot count comes from the run's transcript.
+must match; `cause` is recorded, not graded). Runs use `--output-format stream-json --verbose`; screenshot count comes from image blocks in the streamed tool results, and usage, cost, duration and turns from the final `result` event.
 Runs that error or hit the cap are recorded as failures, never dropped.
 
 **Report.** Per task and overall, for each arm: median and interquartile range of total tokens,

@@ -2,3 +2,4 @@ node_modules/
 results/*.tmp
 .DS_Store
 .superpowers/
+bench/.runs/

@@ -1,0 +1,8 @@
+{
+  "name": "headless-verify",
+  "version": "0.1.0",
+  "description": "Verify local web apps with headless scripts that print compact text instead of screenshot-driven browser automation.",
+  "author": { "name": "Jonathan Yen" },
+  "license": "MIT",
+  "repository": "https://github.com/jonyen/headless-verify"
+}

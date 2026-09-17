@@ -1,0 +1,16 @@
+{
+  "name": "headless-verify",
+  "version": "0.1.0",
+  "description": "Verify local web apps from Claude Code with headless scripts instead of screenshot-driven browser automation.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jonathan Yen",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test 'test/*.test.mjs'",
+    "analyze": "node analyze/session-cost.mjs",
+    "bench": "node bench/run.mjs",
+    "report": "node bench/report.mjs"
+  },
+  "dependencies": { "playwright-core": "^1.63.0" }
+}
