@@ -29,20 +29,34 @@ const ATTACHMENT_METADATA = new Set([
   'isInitial', 'skillCount', 'showConcurrencyNote', 'isNew', 'sendUserFileHint',
 ]);
 
-function stringChars(value) {
+// Text characters in an attachment without a rendered form. Image blocks are collected as images
+// (their base64 is not text the model reads as characters); document blocks and any `source` or
+// `data` field are skipped.
+function walkAttachment(value, images) {
   if (typeof value === 'string') return value.length;
-  if (Array.isArray(value)) return value.reduce((s, v) => s + stringChars(v), 0);
-  if (value && typeof value === 'object') {
-    return Object.entries(value).reduce((s, [k, v]) => s + (ATTACHMENT_METADATA.has(k) ? 0 : stringChars(v)), 0);
+  if (Array.isArray(value)) return value.reduce((s, v) => s + walkAttachment(v, images), 0);
+  if (!value || typeof value !== 'object') return 0;
+  if (value.type === 'image') {
+    images.push(imageSize(typeof value.source?.data === 'string' ? value.source.data : ''));
+    return 0;
   }
-  return 0;
+  if (value.type === 'document') return 0;
+  return Object.entries(value).reduce(
+    (s, [k, v]) => s + (ATTACHMENT_METADATA.has(k) || k === 'source' || k === 'data' ? 0 : walkAttachment(v, images)),
+    0,
+  );
 }
 
-export function attachmentChars(entry) {
-  if (Array.isArray(entry.rendered)) return entry.rendered.reduce((s, r) => s + (typeof r?.content === 'string' ? r.content.length : 0), 0);
+// Returns { textChars, images } for one attachment entry.
+export function attachmentContent(entry) {
+  const images = [];
+  if (Array.isArray(entry.rendered)) {
+    const textChars = entry.rendered.reduce((s, r) => s + (typeof r?.content === 'string' ? r.content.length : 0), 0);
+    return { textChars, images };
+  }
   const a = entry.attachment;
-  if (!a || !SENT_ATTACHMENT_TYPES.has(a.type)) return 0;
-  return stringChars(a);
+  if (!a || !SENT_ATTACHMENT_TYPES.has(a.type)) return { textChars: 0, images };
+  return { textChars: walkAttachment(a, images), images };
 }
 
 function contentBlocks(content) {
@@ -50,7 +64,9 @@ function contentBlocks(content) {
   return Array.isArray(content) ? content : [];
 }
 
-export function parseTranscript(text) {
+// `attachments: false` parses as the original analyzer did (attachment entries ignored); the
+// CLI's --fixed mode uses it to reproduce the fixed-ratio numbers exactly.
+export function parseTranscript(text, { attachments = true } = {}) {
   const calls = new Map();
   const results = [];
   const turns = [];
@@ -79,11 +95,12 @@ export function parseTranscript(text) {
     }
     if (entry.type === 'user' && entry.isCompactSummary === true) markCompaction();
     if (entry.type === 'attachment') {
+      if (!attachments) continue;
       // Same attribution as context:user: growth only once a turn has completed.
-      const chars = attachmentChars(entry);
-      if (chars > 0 && turns.length > 0) {
-        attachmentTotal += chars;
-        results.push({ toolUseId: null, name: 'context:attachment', turn: turns.length - 1, textChars: chars, images: [] });
+      const { textChars, images } = attachmentContent(entry);
+      if ((textChars > 0 || images.length > 0) && turns.length > 0) {
+        attachmentTotal += textChars;
+        results.push({ toolUseId: null, name: 'context:attachment', turn: turns.length - 1, textChars, images });
       }
       continue;
     }

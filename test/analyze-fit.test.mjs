@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fitRatios, buildObservations } from '../analyze/fit.mjs';
+import { fitRatios, buildObservations, summarizeFits } from '../analyze/fit.mjs';
 import { costBreakdown } from '../analyze/cost.mjs';
 import { parseTranscript } from '../analyze/transcript.mjs';
 
@@ -98,16 +98,20 @@ test('the turn after a drop is excluded when its growth is negative, and not at 
   // Build a following turn with negative growth but no context drop: output larger than growth.
   const t2 = syntheticTranscript();
   t2.turns[40].usage.output = 100000;
-  const o2 = buildObservations(t2).find((o) => o.turn === 41);
+  const obs2 = buildObservations(t2);
+  const o2 = obs2.find((o) => o.turn === 41);
   assert.ok(o2.recorded < 0);
-  assert.equal(o2.reset, 'after');
+  assert.equal(o2.afterDrop, true);
+  assert.deepEqual(fitRatios(obs2).excluded, { contextDrop: 1, compactMarker: 0, afterDrop: 1, nonPositiveGrowth: 0 });
   const mid = syntheticTranscript();
   const obs = buildObservations(mid);
   const growths = obs.filter((o) => !o.reset).map((o) => o.recorded).sort((x, y) => x - y);
   const median = growths[growths.length >> 1];
   const target = obs.find((o) => o.turn === 41).recorded;
   for (let k = 41; k < mid.turns.length; k++) mid.turns[k].usage.cacheRead += Math.max(0, 4 * median - target);
-  assert.equal(buildObservations(mid).find((o) => o.turn === 41).reset, null);
+  const midObs = buildObservations(mid);
+  assert.equal(midObs.find((o) => o.turn === 41).afterDrop, true);
+  assert.equal(fitRatios(midObs).excluded.afterDrop, 0);
 });
 
 test('an explicit compact marker excludes only the turn it lands on', () => {
@@ -150,6 +154,154 @@ test('attachment characters count as context for the turn they arrive before', (
   assert.equal(b.families.find((f) => f.family === 'context:attachment').directTokens, 31);
 });
 
+test('a class with too little data stays fixed at 4 chars/token', () => {
+  // Only 3 observations carry context chars: too few to fit that class.
+  const obs = synthetic({ contextEvery: 1000 }).map((o, i) =>
+    i < 3 ? { ...o, contextChars: 400, recorded: o.recorded + 100 } : o,
+  );
+  const fit = fitRatios(obs);
+  assert.equal(fit.method, 'fitted');
+  assert.equal(fit.contextCharsPerToken, 4);
+  assert.ok(within(fit.toolCharsPerToken, 1.5, 5), `tool ${fit.toolCharsPerToken}`);
+});
+
+test('observations with zero or negative recorded growth are dropped and counted', () => {
+  const obs = synthetic();
+  obs[3] = { ...obs[3], recorded: 0 };
+  obs[10] = { ...obs[10], recorded: -50000 };
+  obs[20] = { ...obs[20], recorded: -1 };
+  const fit = fitRatios(obs);
+  assert.equal(fit.dropped, 3);
+  assert.equal(fit.excluded.nonPositiveGrowth, 3);
+  assert.equal(fit.observations, 97);
+  assert.ok(within(fit.toolCharsPerToken, 1.5, 5));
+});
+
+test('fewer than 20 usable observations gives method fixed', () => {
+  const fit = fitRatios(synthetic({ n: 19 }));
+  assert.equal(fit.method, 'fixed');
+  assert.equal(fit.toolCharsPerToken, 4);
+  assert.equal(fit.contextCharsPerToken, 4);
+  assert.match(fit.reason, /20/);
+});
+
+test('dropped rows do not count toward the 20-observation minimum', () => {
+  const obs = synthetic({ n: 21 });
+  obs[0] = { ...obs[0], recorded: 0 };
+  obs[1] = { ...obs[1], recorded: -3 };
+  const fit = fitRatios(obs);
+  assert.equal(fit.method, 'fixed');
+  assert.equal(fit.dropped, 2);
+});
+
+test('costBreakdown with explicit ratios scales tool and context tokens independently', () => {
+  const turns = [0, 1, 2].map((index) => ({ index, usage: { input: 0, cacheCreation: 0, cacheRead: 0, output: 0 } }));
+  const results = [
+    { name: 'Bash', turn: 0, textChars: 300, images: [] },
+    { name: 'context:user', turn: 0, textChars: 700, images: [] },
+  ];
+  const fam = (b, name) => b.families.find((f) => f.family === name).directTokens;
+  const fixed = costBreakdown({ results, turns });
+  assert.equal(fam(fixed, 'Bash'), 75);
+  assert.equal(fam(fixed, 'context:user'), 175);
+  const scaled = costBreakdown({ results, turns }, { ratios: { toolCharsPerToken: 1.5, contextCharsPerToken: 3.5 } });
+  assert.equal(fam(scaled, 'Bash'), 200);
+  assert.equal(fam(scaled, 'context:user'), 200);
+  const toolOnly = costBreakdown({ results, turns }, { ratios: { toolCharsPerToken: 3, contextCharsPerToken: 4 } });
+  assert.equal(fam(toolOnly, 'Bash'), 100);
+  assert.equal(fam(toolOnly, 'context:user'), 175);
+});
+
+test('buildObservations splits arriving chars into tool, context and image tokens', async () => {
+  const transcript = parseTranscript(await readFile(new URL('./fixtures/session-small.jsonl', import.meta.url), 'utf8'));
+  const obs = buildObservations(transcript);
+  // Fixture: turn1 growth 2100 = 400 chars + 2000 image tokens; turn2 growth 200 = 800 chars.
+  assert.deepEqual(obs, [
+    { turn: 1, recorded: 2100, toolChars: 400, contextChars: 0, imageTokens: 2000, reset: null, afterDrop: false },
+    { turn: 2, recorded: 200, toolChars: 800, contextChars: 0, imageTokens: 0, reset: null, afterDrop: false },
+  ]);
+});
+
+test('attachment image blocks count as image tokens, never as text; source/data fields are skipped', () => {
+  const png = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0);
+  png.writeUInt32BE(300, 16);
+  png.writeUInt32BE(250, 20);
+  const t = parseTranscript(jsonl([
+    asst('a'),
+    { type: 'attachment', attachment: { type: 'queued_command', prompt: [
+      { type: 'text', text: 'q'.repeat(80) },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png.toString('base64') + 'A'.repeat(250000) } },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'not-an-image' } },
+      { type: 'document', source: { type: 'base64', data: 'D'.repeat(9000) } },
+      { type: 'text', text: 'w'.repeat(5), data: 'x'.repeat(700) },
+    ] } },
+    asst('b'),
+  ]));
+  const r = t.results.filter((x) => x.name === 'context:attachment');
+  assert.equal(r.length, 1);
+  assert.equal(r[0].textChars, 85);
+  assert.deepEqual(r[0].images, [{ width: 300, height: 250 }, null]);
+  assert.equal(t.attachmentChars, 85);
+  const obs = buildObservations(t);
+  assert.equal(obs[0].contextChars, 85);
+  assert.equal(obs[0].imageTokens, 100 + 1600);
+});
+
+test('a class fitted outside 1-8 chars/token is held at 4 and reported out of range', () => {
+  const ctxLow = fitRatios(synthetic({ context: 0.8 }));
+  assert.equal(ctxLow.method, 'fitted');
+  assert.equal(ctxLow.contextCharsPerToken, 4);
+  assert.deepEqual(ctxLow.fittedClasses, ['tool']);
+  assert.deepEqual(ctxLow.outOfRange, ['context']);
+  const toolHigh = fitRatios(synthetic({ tool: 12, context: 3 }));
+  assert.equal(toolHigh.toolCharsPerToken, 4);
+  assert.ok(toolHigh.outOfRange.includes('tool'), `outOfRange ${toolHigh.outOfRange}`);
+  const both = fitRatios(synthetic({ tool: 20, context: 0.3 }));
+  assert.equal(both.method, 'fixed');
+  assert.deepEqual([...both.outOfRange].sort(), ['context', 'tool']);
+  assert.match(both.reason, /range/);
+  const ok = fitRatios(synthetic());
+  assert.deepEqual(ok.outOfRange, []);
+});
+
+test('summarizeFits reports headline figures with and without out-of-range sessions', () => {
+  const fit = (median, extra = {}) => ({ method: 'fitted', toolCharsPerToken: 2, contextCharsPerToken: 3, fittedClasses: ['tool', 'context'], outOfRange: [], medianTurnHoldoutErrorPct: median, summedHoldoutErrorPct: 1, holdoutPredicted: 10, holdoutRecorded: 10, ...extra });
+  const fits = [
+    fit(10),
+    fit(12, { contextCharsPerToken: 4, fittedClasses: ['tool'], outOfRange: ['context'] }),
+    fit(40),
+    { method: 'fixed', toolCharsPerToken: 4, contextCharsPerToken: 4, outOfRange: ['tool', 'context'], medianTurnHoldoutErrorPct: null },
+    { method: 'fixed', toolCharsPerToken: 4, contextCharsPerToken: 4, outOfRange: [], medianTurnHoldoutErrorPct: null },
+  ];
+  const s = summarizeFits(fits);
+  assert.equal(s.all.fittedSessions, 3);
+  assert.equal(s.all.medianSessionMedianTurnHoldoutErrorPct, 12);
+  assert.equal(s.all.sessionsMeeting15Pct, 2);
+  assert.equal(s.outOfRangeSessions, 2);
+  assert.equal(s.inRangeOnly.fittedSessions, 2);
+  assert.equal(s.inRangeOnly.medianSessionMedianTurnHoldoutErrorPct, 25);
+  assert.equal(s.inRangeOnly.sessionsMeeting15Pct, 1);
+  // Context median only over sessions where context was actually fitted in range.
+  assert.equal(s.all.medianContextCharsPerToken, 3);
+});
+
+test('the after-drop threshold for held-out turns comes from training turns only', () => {
+  const obs = [];
+  const at100 = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 20, 25]);
+  for (let turn = 1; turn <= 26; turn++) {
+    const recorded = at100.has(turn) ? 100 : 1000;
+    obs.push({ turn, recorded, toolChars: recorded * 1.5, contextChars: 0, imageTokens: 0, reset: null, afterDrop: false });
+  }
+  obs.push({ turn: 30, recorded: 3000, toolChars: 4500, contextChars: 0, imageTokens: 0, reset: null, afterDrop: true });
+  const fit = fitRatios(obs);
+  // All turns: median 100, so 3000 > 5x100 and the final fit excludes the candidate.
+  assert.equal(fit.excluded.afterDrop, 1);
+  assert.equal(fit.observations, 26);
+  // Fold 0 training turns: median 1000, so the held-out candidate (3000 < 5000) is scored.
+  assert.equal(fit.holdoutTurns.length, 27);
+});
+
 const cli = new URL('../analyze/session-cost.mjs', import.meta.url).pathname;
 const fixture = new URL('./fixtures/session-small.jsonl', import.meta.url).pathname;
 const run = (...args) => promisify(execFile)('node', [cli, ...args]);
@@ -164,6 +316,27 @@ test('CLI --fixed reproduces the fixed-ratio numbers on the fixture', async () =
   const data = JSON.parse(out);
   assert.equal(data.calibration.estimated, 2300);
   assert.equal(data.ratios.method, 'fixed');
+});
+
+const attachFixture = new URL('./fixtures/session-attachments.jsonl', import.meta.url).pathname;
+
+test('CLI --fixed reproduces main exactly on a fixture with attachments and a compaction marker', async () => {
+  // Expected values are main's analyzer output (commit 7f62565) on this fixture.
+  const { stdout } = await run(attachFixture, '--fixed');
+  assert.match(stdout, /Sessions: 1 · billed input tokens: 7,570 · skipped 1 malformed lines/);
+  const rows = stdout.split('\n').filter((l) => /^\| (?!tool family|---)/.test(l));
+  assert.deepEqual(rows, [
+    '| claude-in-chrome | 1 | 1 | 2,100 | 2,100 | 55.5% |',
+    '| Bash | 1 | 0 | 200 | 0 | 2.6% |',
+    '| unknown | 1 | 0 | 2 | 0 | 0.0% |',
+  ]);
+  assert.match(stdout, /calibration: estimated 2,300 vs recorded 2,300 tokens of new context \(0\.0% off\) · implied chars\/token \(tool-result-only turns\): 4\.00/);
+  assert.match(stdout, /Ratios: fixed \(--fixed\)/);
+  assert.doesNotMatch(stdout, /attachment|excluded|holdout/);
+  const data = JSON.parse((await run(attachFixture, '--fixed', '--json')).stdout);
+  assert.deepEqual(data.families.map((f) => [f.family, f.directTokens, f.carryTokens]), [['claude-in-chrome', 2100, 2100], ['Bash', 200, 0], ['unknown', 2, 0]]);
+  assert.deepEqual(data.calibration, { estimated: 2300, recorded: 2300, errorPct: 0, impliedCharsPerToken: 4 });
+  assert.deepEqual(data.ratios, { method: 'fixed', toolCharsPerToken: 4, contextCharsPerToken: 4, reason: '--fixed' });
 });
 
 test('CLI reports the ratio method and never prints tool-result text', async () => {
