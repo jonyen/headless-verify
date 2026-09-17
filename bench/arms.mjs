@@ -9,7 +9,7 @@ export function armArgs(arm, { model, budgetUsd, pluginDir }) {
     '--model', model,
     '--max-budget-usd', String(budgetUsd),
   ];
-  if (arm === 'browser') return [...common, '--chrome', '--disallowedTools', 'Bash'];
-  if (arm === 'headless') return [...common, '--no-chrome', '--plugin-dir', pluginDir];
+  if (arm === 'browser') return [...common, '--chrome', '--disallowedTools', 'Bash', '--'];
+  if (arm === 'headless') return [...common, '--no-chrome', '--plugin-dir', pluginDir, '--'];
   throw new Error(`unknown arm ${arm}`);
 }

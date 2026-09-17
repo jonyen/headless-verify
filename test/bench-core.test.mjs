@@ -23,6 +23,9 @@ test('extractAnswer takes the last JSON object with a boolean works', () => {
   assert.deepEqual(extractAnswer(text), { works: false, cause: 'y' });
   assert.equal(extractAnswer('no json here'), null);
   assert.equal(extractAnswer('{"works": "yes"}'), null);
+  // Test with braces in the cause string
+  const textWithBraces = 'Result:\n{"works": false, "cause": "handler reads obj.value where obj is {} and throws }"}';
+  assert.deepEqual(extractAnswer(textWithBraces), { works: false, cause: 'handler reads obj.value where obj is {} and throws }' });
 });
 
 test('grade compares works against the variant', () => {
@@ -64,6 +67,7 @@ test('arm arguments isolate the tools under test', () => {
     assert.ok(args.includes('--no-session-persistence'));
     assert.equal(args[args.indexOf('--max-budget-usd') + 1], '2');
     assert.equal(args[args.indexOf('--model') + 1], 'claude-opus-5');
+    assert.equal(args.at(-1), '--');
   }
   assert.ok(browser.includes('--chrome'));
   assert.equal(browser[browser.indexOf('--disallowedTools') + 1], 'Bash');
