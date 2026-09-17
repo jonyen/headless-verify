@@ -48,16 +48,20 @@ Not run yet.
 
 ```sh
 node analyze/session-cost.mjs ~/.claude/projects/<project>/<session>.jsonl
-node analyze/session-cost.mjs --all --since 2026-09-01
+node analyze/session-cost.mjs --all --since 2026-09-01   # add --fixed for 4 chars/token
 ```
 
 Reports calls, images, direct tokens and carry tokens (results re-read on later turns) per tool
 family, plus a calibration line comparing its estimates with the usage recorded in the
 transcript. It reads local files only and never prints tool-result content.
 
-The estimates are not yet calibrated: on a tool-output-heavy session they currently come to about
-half of the recorded usage (tool output implies ~1.5 chars/token, against the fixed 4 chars/token
-the estimate uses), so treat the numbers as a lower bound; see [docs/validation.md](docs/validation.md).
+Token estimates use chars/token ratios fitted per session from the transcript's own recorded
+usage (separate ratios for tool-result text and other context text), checked on held-out turns
+with 5-fold cross-validation. Sessions with fewer than 20 usable turns fall back to a fixed
+4 chars/token; `--fixed` forces that. The output shows the method, the fitted ratios, the holdout
+error and the old fixed-ratio calibration for comparison. On the originating session the holdout
+error is 22%, above the 15% target, so treat per-family numbers as approximate; see
+[docs/validation.md](docs/validation.md).
 
 ## Run the benchmark
 

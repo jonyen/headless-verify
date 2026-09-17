@@ -154,19 +154,28 @@ confirmation before the full run. `--runs N` and `--tasks a,b` allow cheaper par
 
 ### Session analyzer: `analyze/session-cost.mjs`
 
-`node analyze/session-cost.mjs [path/to/session.jsonl | --all] [--since YYYY-MM-DD] [--json]`
+`node analyze/session-cost.mjs [path/to/session.jsonl | --all] [--since YYYY-MM-DD] [--json] [--fixed]`
 
 - Pairs each `tool_use` with its `tool_result` by id.
-- Estimates each result's direct size: text at ~4 characters per token; images at
-  `width × height / 750` tokens from their decoded dimensions, the published approximation for
-  Claude image input.
+- Estimates each result's direct size: text at a chars-per-token ratio fitted per session;
+  images at `width × height / 750` tokens from their decoded dimensions, the published
+  approximation for Claude image input.
+- **Fitted ratios** (changed 2026-09-16; the original design used a fixed ~4 chars/token, which
+  came out about 50% below recorded usage on tool-output-heavy sessions). Per turn with arriving
+  content, recorded growth (context(k) − context(k−1) − output(k−1)) is modelled as tool-result
+  chars / tool ratio + other context chars / context ratio + image tokens, fitted by least squares
+  with non-negative coefficients. A class with fewer than 5 non-zero observations or a
+  non-positive fit is held at 4 chars/token; turns with growth ≤ 0 are dropped and counted.
+  Validation is 5-fold holdout (folds by turn index mod 5), reporting |Σ predicted − Σ recorded| /
+  Σ recorded and the median per-turn error. Sessions with fewer than 20 usable turns, or `--fixed`,
+  use 4 chars/token. The fixed-ratio calibration is still printed for comparison.
 - Computes **carry cost**: the number of later assistant turns in the session that re-read the
   result, times its size, priced at the cache-read rate. Direct size and carry cost are reported
   separately.
 - Groups by tool family (claude-in-chrome, Bash, Read, others) and reports each family's share of
   the session's billed input tokens.
-- Prints its estimates next to the per-turn `usage` fields recorded in the transcript as a sanity
-  check on the approximations.
+- Prints the ratio method, fitted ratios, holdout error and median per-turn error, plus the
+  fixed-ratio estimate next to the recorded `usage` as a sanity check.
 - Output: a markdown table by default, `--json` for scripts.
 - Reads local files only and never sends data anywhere. Output contains tool names and counts,
   never tool-result content, so it is safe to paste into an issue.
@@ -201,8 +210,10 @@ All tests run with `node --test`, offline, spending no tokens.
 - The test suite passes offline.
 - A full benchmark run produces a results file and README table with both arms' medians, spread
   and accuracy.
-- The analyzer's estimates for this project's originating session are within 15% of the input
-  tokens recorded in its transcript for the attributed turns.
+- The analyzer's fitted estimates for this project's originating session have a 5-fold holdout
+  error within 15% of the input tokens recorded in its transcript for the held-out turns (changed
+  2026-09-16 from an in-sample fixed-ratio comparison, so the criterion measures prediction on
+  turns the fit did not see rather than a constant chosen after the fact).
 
 ## Open questions
 

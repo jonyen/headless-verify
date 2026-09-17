@@ -1,5 +1,80 @@
 # Validation against the spec's success criteria
 
+## Update 2026-09-16: fitted chars/token ratios with held-out validation
+
+The analyzer no longer relies only on a fixed 4 chars/token. Per session it fits two ratios
+(tool-result text and `context:user` text) from the transcript's own recorded context growth and
+validates them on held-out turns (`analyze/fit.mjs`):
+
+- Observation per turn k ≥ 1 with arriving content: recorded growth
+  (context(k) − context(k−1) − output(k−1)), tool-result chars, `context:user` chars, and image
+  tokens from pixels (held fixed).
+- Model `recorded ≈ toolChars / toolRatio + contextChars / contextRatio + imageTokens`, least
+  squares on the 2×2 normal equations. A class with fewer than 5 non-zero observations, or a
+  non-positive coefficient, is held at 4 chars/token and the other class is refit alone. Turns with
+  recorded growth ≤ 0 (compaction, cache anomalies) are dropped and counted.
+- 5-fold holdout, folds by turn index mod 5: fit on four folds, predict the fifth. **Holdout
+  error** = |Σ predicted − Σ recorded| / Σ recorded over all held-out turns; the median absolute
+  per-turn percentage error is reported too.
+- Fewer than 20 usable observations, or no fittable class: `method: fixed`, 4 chars/token.
+- `--fixed` forces the old behaviour; the fixed-ratio calibration line is still printed for
+  comparison. `npm test`: 65/65 pass (9 new tests in `test/analyze-fit.test.mjs`).
+
+The spec's 15% criterion now applies to the holdout error.
+
+### Originating session
+
+```
+node analyze/session-cost.mjs ~/.claude/projects/<project>/<session>.jsonl
+```
+
+(Live, growing transcript; numbers are from the single run quoted.)
+
+| | value |
+| --- | --- |
+| method | fitted |
+| tool-result chars/token | 2.35 |
+| `context:user` chars/token | 2.65 |
+| holdout error | **22.0%** |
+| median per-turn error | 23.7% |
+| observations / dropped | 274 / 0 |
+| fixed-ratio calibration (for comparison) | estimated 121,645 vs recorded 243,174, 50.0% off; implied 1.52 chars/token on tool-result-only turns |
+
+**The 15% criterion is not met on this session** (22.0% holdout error). Fitting cuts the error
+from 50.0% to 22.0%, but a two-ratio model of characters cannot explain the rest. Most turns are
+small: 226 of the 274 observations bring under 2,000 characters, and on those turns recorded growth
+averages 504 tokens while the fitted model leaves an average of +231 tokens unexplained. That
+residual does not track the previous turn's output tokens (correlation −0.03). The likeliest
+explanation is a per-turn overhead that has no characters in the transcript: message and
+tool-result framing, and content the harness adds to the request without logging it. Least
+squares is dominated by the few large turns, so the fitted ratios (2.35 / 2.65) come out higher
+than the 1.52 implied by tool-result-only turns, and the small turns are under-predicted. Nothing
+was tuned to pass. Adding an intercept (per-turn overhead) term would be a model change and needs
+its own design review; it is not part of this change.
+
+### All sessions since 2026-09-01 (aggregate only)
+
+```
+node analyze/session-cost.mjs --all --since 2026-09-01
+```
+
+| | value |
+| --- | --- |
+| sessions | 40 (25 fitted: 18 both classes, 7 tool only with context held at 4; 15 fixed, all for fewer than 20 usable observations) |
+| observations / dropped | 5,818 / 30 |
+| median ratio over fitted sessions, tool / context | 2.22 / 2.64 chars/token (context median includes the 7 sessions held at 4) |
+| pooled holdout error (fitted sessions) | 14.3% |
+| median per-session holdout error | 18.5% |
+| median per-session median per-turn error | 26.3% |
+| fitted sessions with holdout error ≤ 15% | 12 of 25 |
+| fixed-ratio calibration (for comparison) | estimated 2,096,729 vs recorded 3,079,349, 31.9% off |
+
+Pooled across sessions the holdout error is just under 15%, but that pooling lets errors in
+opposite directions cancel. Fewer than half of fitted sessions (12 of 25) meet 15% on their own, so
+this does not show the criterion is met per session.
+
+## History: fixed 4 chars/token validation (before the update above)
+
 Scope: Task 9, Part A (Steps 1-3 only — offline validation). Steps 4-6 (trial benchmark, full
 benchmark, push) are out of scope for this pass and were not run.
 
