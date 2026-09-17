@@ -64,9 +64,6 @@ const combined = reports.reduce(
       row.carryTokens += f.carryTokens;
       acc.families.set(f.family, row);
     }
-    acc.overhead.turns += r.overhead.turns;
-    acc.overhead.directTokens += r.overhead.directTokens;
-    acc.overhead.carryTokens += r.overhead.carryTokens;
     acc.billedInput += r.totals.billedInput;
     acc.estimated += r.calibration.estimated;
     acc.recorded += r.calibration.recorded;
@@ -74,7 +71,7 @@ const combined = reports.reduce(
     acc.impliedDenominator += r.calibration.impliedDenominator;
     return acc;
   },
-  { families: new Map(), overhead: { turns: 0, directTokens: 0, carryTokens: 0 }, billedInput: 0, estimated: 0, recorded: 0, impliedTextChars: 0, impliedDenominator: 0 },
+  { families: new Map(), billedInput: 0, estimated: 0, recorded: 0, impliedTextChars: 0, impliedDenominator: 0 },
 );
 const families = [...combined.families.values()]
   .map((f) => ({ ...f, shareOfInput: combined.billedInput ? (f.directTokens + f.carryTokens) / combined.billedInput : 0 }))
@@ -89,7 +86,6 @@ const pick = (f) => ({
   method: f.method,
   toolCharsPerToken: f.toolCharsPerToken,
   contextCharsPerToken: f.contextCharsPerToken,
-  overheadTokensPerTurn: f.overheadTokensPerTurn,
   observations: f.observations,
   dropped: f.dropped,
   holdoutErrorPct: f.holdoutErrorPct,
@@ -119,12 +115,11 @@ const ratios =
         medianSessionTurnErrorPct: med(fitted.map((f) => f.medianTurnErrorPct)),
         medianToolCharsPerToken: med(fitted.map((f) => f.toolCharsPerToken)),
         medianContextCharsPerToken: med(fitted.map((f) => f.contextCharsPerToken)),
-        medianOverheadTokensPerTurn: med(fitted.map((f) => f.overheadTokensPerTurn)),
         sessionsMeetingHoldout15Pct: fitted.filter((f) => f.holdoutErrorPct <= 15).length,
       };
 
 if (json) {
-  console.log(JSON.stringify({ sessions: files.length, malformed, billedInput: combined.billedInput, families, overhead: combined.overhead, ratios, calibration: { estimated: combined.estimated, recorded: combined.recorded, errorPct, impliedCharsPerToken } }, null, 2));
+  console.log(JSON.stringify({ sessions: files.length, malformed, billedInput: combined.billedInput, families, ratios, calibration: { estimated: combined.estimated, recorded: combined.recorded, errorPct, impliedCharsPerToken } }, null, 2));
 } else {
   const fmt = (n) => Math.round(n).toLocaleString('en-US');
   console.log(`Sessions: ${files.length} · billed input tokens: ${fmt(combined.billedInput)}${malformed ? ` · skipped ${malformed} malformed lines` : ''}\n`);
@@ -133,21 +128,15 @@ if (json) {
   for (const f of families) {
     console.log(`| ${f.family} | ${f.calls} | ${f.images} | ${fmt(f.directTokens)} | ${fmt(f.carryTokens)} | ${(f.shareOfInput * 100).toFixed(1)}% |`);
   }
-  const oh = combined.overhead;
-  if (oh.directTokens > 0) {
-    // Not a tool family: fitted harness overhead per turn × turns, and its re-reads.
-    const share = combined.billedInput ? ((oh.directTokens + oh.carryTokens) / combined.billedInput) * 100 : 0;
-    console.log(`| per-turn overhead (estimate, not a tool) | ${oh.turns} turns | - | ${fmt(oh.directTokens)} | ${fmt(oh.carryTokens)} | ${share.toFixed(1)}% |`);
-  }
   const impliedStr = impliedCharsPerToken === null ? 'n/a' : impliedCharsPerToken.toFixed(2);
   const pct = (x) => (x === null ? 'n/a' : `${x.toFixed(1)}%`);
   const r2 = (x) => (x === null ? 'n/a' : x.toFixed(2));
   if (files.length === 1) {
     const f = ratios;
     const head = f.method === 'fitted' ? 'fitted' : `fixed (${f.reason})`;
-    console.log(`\nRatios: ${head} · tool ${r2(f.toolCharsPerToken)} chars/token · context ${r2(f.contextCharsPerToken)} chars/token · overhead ${fmt(f.overheadTokensPerTurn)} tokens/turn · holdout error ${pct(f.holdoutErrorPct)} · median per-turn error ${pct(f.medianTurnErrorPct)} · observations ${f.observations}, dropped ${f.dropped}`);
+    console.log(`\nRatios: ${head} · tool ${r2(f.toolCharsPerToken)} chars/token · context ${r2(f.contextCharsPerToken)} chars/token · holdout error ${pct(f.holdoutErrorPct)} · median per-turn error ${pct(f.medianTurnErrorPct)} · observations ${f.observations}, dropped ${f.dropped}`);
   } else {
-    console.log(`\nRatios: fitted in ${ratios.fittedSessions} sessions, fixed in ${ratios.fixedSessions}${forceFixed ? ' (--fixed)' : ''} · median tool ${r2(ratios.medianToolCharsPerToken)} / context ${r2(ratios.medianContextCharsPerToken)} chars/token · median overhead ${ratios.medianOverheadTokensPerTurn === null ? 'n/a' : fmt(ratios.medianOverheadTokensPerTurn)} tokens/turn · pooled holdout error ${pct(ratios.pooledHoldoutErrorPct)} · median session holdout error ${pct(ratios.medianSessionHoldoutErrorPct)} · median per-turn error ${pct(ratios.medianSessionTurnErrorPct)} · ${ratios.sessionsMeetingHoldout15Pct} sessions ≤15% · observations ${ratios.observations}, dropped ${ratios.dropped}`);
+    console.log(`\nRatios: fitted in ${ratios.fittedSessions} sessions, fixed in ${ratios.fixedSessions}${forceFixed ? ' (--fixed)' : ''} · median tool ${r2(ratios.medianToolCharsPerToken)} / context ${r2(ratios.medianContextCharsPerToken)} chars/token · pooled holdout error ${pct(ratios.pooledHoldoutErrorPct)} · median session holdout error ${pct(ratios.medianSessionHoldoutErrorPct)} · median per-turn error ${pct(ratios.medianSessionTurnErrorPct)} · ${ratios.sessionsMeetingHoldout15Pct} sessions ≤15% · observations ${ratios.observations}, dropped ${ratios.dropped}`);
   }
   console.log(`Fixed-ratio calibration: estimated ${fmt(combined.estimated)} vs recorded ${fmt(combined.recorded)} tokens of new context (${errorPct.toFixed(1)}% off) · implied chars/token (tool-result-only turns): ${impliedStr}`);
 }

@@ -162,16 +162,13 @@ confirmation before the full run. `--runs N` and `--tasks a,b` allow cheaper par
   approximation for Claude image input.
 - **Fitted ratios** (changed 2026-09-16; the original design used a fixed ~4 chars/token, which
   came out about 50% below recorded usage on tool-output-heavy sessions). Per turn with arriving
-  content, recorded growth (context(k) − context(k−1) − output(k−1)) is modelled as a fixed
-  per-turn overhead + tool-result chars / tool ratio + other context chars / context ratio + image
-  tokens, fitted by least squares. The overhead term was added later the same day because
-  characters alone left a consistent unexplained amount on small turns. Overhead is clamped at ≥ 0.
-  A class with fewer than 5 non-zero observations, or a non-positive fit, is held at
-  4 chars/token. Turns with growth ≤ 0 are dropped and counted. Validation is 5-fold holdout (folds
-  by turn index mod 5), reporting |Σ predicted − Σ recorded| / Σ recorded and the median per-turn
-  error. Sessions with fewer than 20 usable turns, or `--fixed`, use 4 chars/token and no
-  overhead. The overhead is reported as its own row (per turn × turns, plus re-reads), never
-  inside a tool family. The fixed-ratio calibration is still printed for comparison.
+  content, recorded growth (context(k) − context(k−1) − output(k−1)) is modelled as tool-result
+  chars / tool ratio + other context chars / context ratio + image tokens, fitted by least squares
+  with non-negative coefficients. A class with fewer than 5 non-zero observations or a
+  non-positive fit is held at 4 chars/token; turns with growth ≤ 0 are dropped and counted.
+  Validation is 5-fold holdout (folds by turn index mod 5), reporting |Σ predicted − Σ recorded| /
+  Σ recorded and the median per-turn error. Sessions with fewer than 20 usable turns, or `--fixed`,
+  use 4 chars/token. The fixed-ratio calibration is still printed for comparison.
 - Computes **carry cost**: the number of later assistant turns in the session that re-read the
   result, times its size, priced at the cache-read rate. Direct size and carry cost are reported
   separately.
@@ -216,9 +213,7 @@ All tests run with `node --test`, offline, spending no tokens.
 - The analyzer's fitted estimates for this project's originating session have a 5-fold holdout
   error within 15% of the input tokens recorded in its transcript for the held-out turns (changed
   2026-09-16 from an in-sample fixed-ratio comparison, so the criterion measures prediction on
-  turns the fit did not see rather than a constant chosen after the fact). With the per-turn
-  overhead term, a summed error is pushed toward zero by construction, so docs/validation.md also
-  reports the median per-turn error, and a claim of calibrated estimates should rest on that.
+  turns the fit did not see rather than a constant chosen after the fact).
 
 ## Open questions
 
