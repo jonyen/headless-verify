@@ -1,6 +1,80 @@
 # Validation against the spec's success criteria
 
-## Update 2026-09-16: fitted chars/token ratios with held-out validation
+## Update 2026-09-16 (2): per-turn overhead term
+
+The fit now has a third unknown, a fixed per-turn overhead (tokens with no characters in the
+transcript: framing, content the harness adds to the request without logging it):
+`recorded ≈ overhead + toolChars / toolRatio + contextChars / contextRatio + imageTokens`, solved
+on the 3×3 normal equations. An overhead that fits negative is clamped to 0; a ratio coefficient
+≤ 0, or a class with too little data, is held at 4 chars/token; the remaining terms are refit.
+Holdout, minimum data and fallback rules are unchanged. `costBreakdown` reports the overhead as its
+own "per-turn overhead (estimate, not a tool)" row (overhead × turns that received content, plus
+its re-reads on later turns), never inside a tool family. `npm test`: 71/71 pass (6 new tests; no
+existing test's expectations changed).
+
+**Read this first:** with an intercept in the model, the summed holdout error stops being a
+useful test. Least squares with an intercept makes in-sample residuals sum to exactly zero, so
+held-out sums also land close to recorded sums whether or not individual turns are predicted well.
+The median per-turn error is the better guide here, and it got worse.
+
+### Originating session
+
+```
+node analyze/session-cost.mjs ~/.claude/projects/<project>/<session>.jsonl
+```
+
+| | ratios only (update 1) | with overhead term |
+| --- | --- | --- |
+| tool-result chars/token | 2.35 | 2.50 |
+| `context:user` chars/token | 2.65 | 2.82 |
+| overhead tokens/turn | — | 238 |
+| holdout error (summed) | 22.0% | **0.2%** |
+| median per-turn error | 23.7% | **54.2%** |
+| observations / dropped | 274 / 0 | 278 / 0 (live file grew) |
+| overhead row, share of billed input | — | 11.4% |
+
+Against the letter of the spec's criterion (summed holdout error ≤ 15%) this session now passes at
+0.2%. **That does not show the estimates are accurate.** The median turn is predicted 54% off,
+worse than without the overhead term. Most turns are small (median recorded growth about 500
+tokens), so a constant of 238 tokens is a large share of each, and the few large turns decide the
+ratios. The model's structure, not per-turn accuracy, produces the low summed error.
+
+### All sessions since 2026-09-01 (aggregate only)
+
+```
+node analyze/session-cost.mjs --all --since 2026-09-01
+```
+
+| | ratios only (update 1) | with overhead term |
+| --- | --- | --- |
+| sessions | 40 (25 fitted, 15 fixed) | 40 (25 fitted, 15 fixed, all for < 20 observations) |
+| observations / dropped | 5,818 / 30 | 5,840 / 30 |
+| median over fitted sessions: tool / context chars/token | 2.22 / 2.64 | 2.54 / 2.85 |
+| median overhead tokens/turn | — | 207 |
+| **median per-session holdout error** | 18.5% | **1.1%** |
+| fitted sessions with holdout error ≤ 15% | 12 of 25 | 22 of 25 |
+| median per-session median per-turn error | 26.3% | **49.8%** |
+| pooled holdout error | 14.3% | 67.5% |
+
+Per session, 22 of 25 fitted sessions meet 15% summed holdout error, and the median fitted
+session is at 1.1%. The same caveat applies, and the rest of the data backs it up:
+
+- The median per-turn error went from 26.3% to 49.8%.
+- In 7 of the 25 fitted sessions the overhead fits between 900 and 2,450 tokens per turn, while
+  median turn growth in those sessions is 200-600 tokens. Their "per-turn overhead" row comes to
+  67-233% of billed input. Above 100% is impossible, so for those sessions the term is absorbing a
+  heavy tail of large turns (and likely context resets such as compaction, which carry cost does
+  not model), not a real constant overhead.
+- One session's summed holdout error is 2,422%: one fold's fit extrapolated badly. That session
+  alone drives the pooled figure to 67.5%.
+
+**Verdict:** the summed-holdout criterion is met on the originating session and on the median
+fitted session. The data shows that is an artefact of adding an intercept, not better estimates.
+Per-turn accuracy got worse, and the overhead is implausible in about a quarter of fitted
+sessions. Nothing was tuned. A per-turn criterion (for example median per-turn error), or a model
+that handles compaction and heavy-tailed turns, would be needed to claim calibrated estimates.
+
+## Update 2026-09-16 (1): fitted chars/token ratios with held-out validation
 
 The analyzer no longer relies only on a fixed 4 chars/token. Per session it fits two ratios
 (tool-result text and `context:user` text) from the transcript's own recorded context growth and

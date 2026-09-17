@@ -55,13 +55,14 @@ Reports calls, images, direct tokens and carry tokens (results re-read on later 
 family, plus a calibration line comparing its estimates with the usage recorded in the
 transcript. It reads local files only and never prints tool-result content.
 
-Token estimates use chars/token ratios fitted per session from the transcript's own recorded
-usage (separate ratios for tool-result text and other context text), checked on held-out turns
-with 5-fold cross-validation. Sessions with fewer than 20 usable turns fall back to a fixed
-4 chars/token; `--fixed` forces that. The output shows the method, the fitted ratios, the holdout
-error and the old fixed-ratio calibration for comparison. On the originating session the holdout
-error is 22%, above the 15% target, so treat per-family numbers as approximate; see
-[docs/validation.md](docs/validation.md).
+Token estimates come from a per-session fit to the transcript's own recorded usage: separate
+chars/token ratios for tool-result text and other context text, plus a fixed per-turn overhead.
+The overhead is reported as its own row, not charged to any tool. The fit is checked on held-out
+turns with 5-fold cross-validation. Sessions with fewer than 20 usable turns fall back to a fixed
+4 chars/token with no overhead; `--fixed` forces that. The summed holdout error is low (0.2% on the
+originating session), but that is largely a side effect of the overhead term: the median turn is
+still predicted about 50% off, and in some sessions the fitted overhead is implausibly large. Treat
+per-family numbers as rough; see [docs/validation.md](docs/validation.md).
 
 ## Run the benchmark
 
