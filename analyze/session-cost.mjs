@@ -55,6 +55,7 @@ for (const file of files) {
     delete fit.fittedClasses;
     delete fit.holdoutTurns;
   }
+  fit.attachmentChars = transcript.attachmentChars;
   fits.push(fit);
   const ratios = fit.method === 'fitted' ? fit : FIXED_RATIOS;
   reports.push(costBreakdown(transcript, { ratios }));
@@ -98,6 +99,7 @@ const pick = (f) => ({
   dropped: f.dropped,
   excluded: f.excluded,
   compactMarkers: f.compactMarkers,
+  attachmentChars: f.attachmentChars,
   ...(f.fittedClasses ? { fittedClasses: f.fittedClasses } : {}),
   ...(f.reason ? { reason: f.reason } : {}),
 });
@@ -124,8 +126,9 @@ const ratios =
         medianContextCharsPerToken: med(fitted.map((f) => f.contextCharsPerToken)),
         observations: fits.reduce((s, f) => s + f.observations, 0),
         dropped: fits.reduce((s, f) => s + f.dropped, 0),
-        excluded: Object.fromEntries(['contextDrop', 'afterDrop', 'nonPositiveGrowth'].map((k) => [k, fits.reduce((s, f) => s + f.excluded[k], 0)])),
+        excluded: Object.fromEntries(['contextDrop', 'compactMarker', 'afterDrop', 'nonPositiveGrowth'].map((k) => [k, fits.reduce((s, f) => s + f.excluded[k], 0)])),
         compactMarkers: fits.reduce((s, f) => s + f.compactMarkers, 0),
+        attachmentChars: fits.reduce((s, f) => s + f.attachmentChars, 0),
         perSession: files.map((file, i) => ({ session: file.split('/').pop().replace(/\.jsonl$/, ''), ...pick(fits[i]) })),
       };
 
@@ -142,7 +145,7 @@ if (json) {
   const impliedStr = impliedCharsPerToken === null ? 'n/a' : impliedCharsPerToken.toFixed(2);
   const pct = (x) => (x === null ? 'n/a' : `${x.toFixed(1)}%`);
   const r2 = (x) => (x === null ? 'n/a' : x.toFixed(2));
-  const exc = (f) => `observations ${f.observations} · excluded: context drop ${f.excluded.contextDrop}, after drop ${f.excluded.afterDrop}, growth ≤ 0: ${f.excluded.nonPositiveGrowth}${f.compactMarkers ? ` (${f.compactMarkers} compact markers)` : ''}`;
+  const exc = (f) => `observations ${f.observations} · excluded: context drop ${f.excluded.contextDrop}, compact marker ${f.excluded.compactMarker}, after drop ${f.excluded.afterDrop}, growth ≤ 0: ${f.excluded.nonPositiveGrowth}${f.compactMarkers ? ` (${f.compactMarkers} compact markers)` : ''} · attachment chars ${fmt(f.attachmentChars)}`;
   if (files.length === 1) {
     const f = ratios;
     const head = f.method === 'fitted' ? 'fitted' : `fixed (${f.reason})`;

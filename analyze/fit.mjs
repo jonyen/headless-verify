@@ -6,13 +6,14 @@
 // equations; a class that has too little data, or fits to a non-positive coefficient, is held
 // at the spec's fixed 4 chars/token and the other class is refit alone.
 //
-// Turns that break the model are excluded before fitting and before scoring: a context reset
-// (recorded context below the previous turn's, or an explicit compact_boundary marker), the
-// turn right after it (its growth is measured from a reset base), and turns with growth ≤ 0.
+// Turns that break the model are excluded before fitting and before scoring: a context drop
+// (recorded context below the previous turn's); the turn a compaction marker lands on; the turn
+// right after a context drop, only if its growth is negative or above 5× the session's median
+// growth (measured from a reset base); and turns with growth ≤ 0.
 // The accuracy criterion is the median absolute per-turn error on held-out turns; the summed
 // holdout error is secondary, because totals can match while individual turns are far off.
 
-import { resultTokens } from './cost.mjs';
+import { resultTokens, isContext } from './cost.mjs';
 
 export const FIXED_CHARS_PER_TOKEN = 4;
 export const MIN_OBSERVATIONS = 20;
@@ -25,10 +26,12 @@ const context = (u) => u.input + u.cacheCreation + u.cacheRead;
 export const CRITERION = 'medianTurnHoldoutErrorPct';
 
 // One observation per turn k ≥ 1 that received content requested/arriving after turn k−1.
-// `reset` is 'drop' for a context-reset turn, 'after' for the turn following one, else null.
+// `reset` is 'drop' for a context-drop turn, 'marker' for the turn a compaction marker lands on
+// (without a usage drop), 'after' for an implausible turn right after a drop, else null.
+export const AFTER_DROP_MEDIAN_MULTIPLE = 5;
 export function buildObservations({ results, turns, compactBoundaries = [] }) {
   const markers = new Set(compactBoundaries);
-  const isReset = (k) => k > 0 && k < turns.length && (context(turns[k].usage) < context(turns[k - 1].usage) || markers.has(k));
+  const isDrop = (k) => k > 0 && k < turns.length && context(turns[k].usage) < context(turns[k - 1].usage);
   const obs = [];
   for (let k = 1; k < turns.length; k++) {
     const arriving = results.filter((r) => r.turn === k - 1);
@@ -37,15 +40,20 @@ export function buildObservations({ results, turns, compactBoundaries = [] }) {
     let contextChars = 0;
     let imageTokens = 0;
     for (const r of arriving) {
-      if (r.name === 'context:user') contextChars += r.textChars;
+      if (isContext(r)) contextChars += r.textChars;
       else toolChars += r.textChars;
       imageTokens += resultTokens(r).image;
     }
     const recorded = context(turns[k].usage) - context(turns[k - 1].usage) - turns[k - 1].usage.output;
-    const reset = isReset(k) ? 'drop' : isReset(k - 1) ? 'after' : null;
+    const reset = isDrop(k) ? 'drop' : markers.has(k) ? 'marker' : null;
     const o = { turn: k, recorded, toolChars, contextChars, imageTokens, reset };
     if (markers.has(k)) Object.defineProperty(o, 'compactMarker', { value: true, enumerable: false });
     obs.push(o);
+  }
+  const growth = median(obs.filter((o) => o.reset === null && o.recorded > 0).map((o) => o.recorded));
+  for (const o of obs) {
+    if (o.reset !== null || !isDrop(o.turn - 1)) continue;
+    if (o.recorded < 0 || (growth !== null && o.recorded > AFTER_DROP_MEDIAN_MULTIPLE * growth)) o.reset = 'after';
   }
   return obs;
 }
@@ -105,10 +113,11 @@ function median(values) {
 }
 
 export function fitRatios(observations) {
-  const excluded = { contextDrop: 0, afterDrop: 0, nonPositiveGrowth: 0 };
+  const excluded = { contextDrop: 0, compactMarker: 0, afterDrop: 0, nonPositiveGrowth: 0 };
   const usable = [];
   for (const o of observations) {
     if (o.reset === 'drop') excluded.contextDrop += 1;
+    else if (o.reset === 'marker') excluded.compactMarker += 1;
     else if (o.reset === 'after') excluded.afterDrop += 1;
     else if (!(o.recorded > 0)) excluded.nonPositiveGrowth += 1;
     else usable.push(o);

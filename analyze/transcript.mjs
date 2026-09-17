@@ -9,6 +9,42 @@ export function toolFamily(name) {
   return mcp[1] === 'claude-in-chrome' ? 'claude-in-chrome' : `mcp:${mcp[1]}`;
 }
 
+// Attachment entries carry content the harness adds to the next request (hook output, reminders,
+// listings). When the entry has a `rendered` form, that is the model-facing text and is counted.
+// Older entries have no `rendered` form; for attachment types that are rendered elsewhere, the
+// string fields of the attachment are counted, minus metadata fields. Types never seen with a
+// rendered form (e.g. prompt_snapshot, a copy of the system prompt) are not counted.
+export const SENT_ATTACHMENT_TYPES = new Set([
+  'hook_success', 'hook_additional_context', 'environment', 'model', 'deferred_tools_delta',
+  'agent_listing_delta', 'mcp_instructions_delta', 'skill_listing', 'auto_mode',
+  'total_tokens_reminder', 'session_context', 'date', 'remote_session_change',
+  'silent_turn_reminder', 'queued_command', 'edited_text_file', 'diagnostics', 'instructions',
+  'bash_output_audience_note',
+]);
+const ATTACHMENT_METADATA = new Set([
+  'type', 'toolUseID', 'hookName', 'hookEvent', 'command', 'durationMs', 'exitCode', 'stdout',
+  'stderr', 'names', 'addedNames', 'removedNames', 'readdedNames', 'wireHiddenNames', 'addedTypes',
+  'removedTypes', 'failedMcpServers', 'needsAuthMcpServers', 'pendingMcpServers', 'source_uuid',
+  'timestamp', 'commandMode', 'origin', 'url', 'commit', 'pr', 'filename', 'displayPath', 'path',
+  'isInitial', 'skillCount', 'showConcurrencyNote', 'isNew', 'sendUserFileHint',
+]);
+
+function stringChars(value) {
+  if (typeof value === 'string') return value.length;
+  if (Array.isArray(value)) return value.reduce((s, v) => s + stringChars(v), 0);
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((s, [k, v]) => s + (ATTACHMENT_METADATA.has(k) ? 0 : stringChars(v)), 0);
+  }
+  return 0;
+}
+
+export function attachmentChars(entry) {
+  if (Array.isArray(entry.rendered)) return entry.rendered.reduce((s, r) => s + (typeof r?.content === 'string' ? r.content.length : 0), 0);
+  const a = entry.attachment;
+  if (!a || !SENT_ATTACHMENT_TYPES.has(a.type)) return 0;
+  return stringChars(a);
+}
+
 function contentBlocks(content) {
   if (typeof content === 'string') return [{ type: 'text', text: content }];
   return Array.isArray(content) ? content : [];
@@ -21,6 +57,10 @@ export function parseTranscript(text) {
   const turnByMessageId = new Map();
   // Index of the first turn after each explicit compaction marker (no content is kept).
   const compactBoundaries = [];
+  const markCompaction = () => {
+    if (compactBoundaries.at(-1) !== turns.length) compactBoundaries.push(turns.length);
+  };
+  let attachmentTotal = 0;
   let malformed = 0;
 
   for (const line of text.split('\n')) {
@@ -34,7 +74,17 @@ export function parseTranscript(text) {
     }
     const message = entry.message ?? {};
     if (entry.type === 'system' && entry.subtype === 'compact_boundary') {
-      if (compactBoundaries.at(-1) !== turns.length) compactBoundaries.push(turns.length);
+      markCompaction();
+      continue;
+    }
+    if (entry.type === 'user' && entry.isCompactSummary === true) markCompaction();
+    if (entry.type === 'attachment') {
+      // Same attribution as context:user: growth only once a turn has completed.
+      const chars = attachmentChars(entry);
+      if (chars > 0 && turns.length > 0) {
+        attachmentTotal += chars;
+        results.push({ toolUseId: null, name: 'context:attachment', turn: turns.length - 1, textChars: chars, images: [] });
+      }
       continue;
     }
     if (entry.type === 'assistant') {
@@ -101,5 +151,5 @@ export function parseTranscript(text) {
       }
     }
   }
-  return { calls, results, turns, compactBoundaries, malformed };
+  return { calls, results, turns, compactBoundaries, attachmentChars: attachmentTotal, malformed };
 }

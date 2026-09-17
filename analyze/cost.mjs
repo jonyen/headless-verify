@@ -12,9 +12,11 @@ export const CHARS_PER_TOKEN = 4;
 export const FIXED_RATIOS = Object.freeze({ toolCharsPerToken: CHARS_PER_TOKEN, contextCharsPerToken: CHARS_PER_TOKEN });
 
 // `ratios` (see analyze/fit.mjs) sets chars per token separately for tool-result text and for
-// context:user text; the default is the spec's fixed 4/4.
+// other context text (context:user, context:attachment); the default is the spec's fixed 4/4.
+export const isContext = (result) => typeof result.name === 'string' && result.name.startsWith('context:');
+
 export function resultTokens(result, ratios = FIXED_RATIOS) {
-  const divisor = result.name === 'context:user' ? ratios.contextCharsPerToken : ratios.toolCharsPerToken;
+  const divisor = isContext(result) ? ratios.contextCharsPerToken : ratios.toolCharsPerToken;
   const text = Math.ceil(result.textChars / divisor);
   const image = result.images.reduce(
     (sum, img) => sum + (img ? Math.round((img.width * img.height) / 750) : UNKNOWN_IMAGE_TOKENS),
@@ -62,7 +64,7 @@ export function costBreakdown({ results, turns }, { ratios = FIXED_RATIOS } = {}
     const turnRecorded = context(turns[k].usage) - context(turns[k - 1].usage) - turns[k - 1].usage.output;
     recorded += turnRecorded;
 
-    const onlyToolResults = arriving.every((r) => r.name !== 'context:user');
+    const onlyToolResults = arriving.every((r) => !isContext(r));
     if (onlyToolResults) {
       const textChars = arriving.reduce((sum, r) => sum + r.textChars, 0);
       const imageTokens = arriving.reduce((sum, r) => sum + resultTokens(r).image, 0);
