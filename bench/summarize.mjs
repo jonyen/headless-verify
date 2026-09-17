@@ -1,5 +1,6 @@
 import { basename, relative, resolve, sep } from 'node:path';
 import { iqr, median, savedPct } from './stats.mjs';
+import { isRateLimited } from './stream.mjs';
 
 const totalTokens = (r) => r.usage.input + r.usage.output + r.usage.cacheCreation + r.usage.cacheRead;
 
@@ -8,18 +9,29 @@ const totalTokens = (r) => r.usage.input + r.usage.output + r.usage.cacheCreatio
 // accuracy, but not in the token/cost/duration medians.
 const NO_USAGE = new Set(['no_result', 'timeout']);
 
+// Records written by a fixed run.mjs already carry subtype 'rate_limited'.
+// Results files written before that fix don't, so fall back to re-deriving
+// it from the record's own finalText/isError/costUsd/turns.
+const wasRateLimited = (r) => r.subtype === 'rate_limited' || isRateLimited(r.finalText, { isError: r.isError, costUsd: r.costUsd, turns: r.turns });
+
+// Runs blocked by the account's usage/rate limit are infrastructure failures,
+// not model failures: they never ran the task at all. They're excluded from
+// n, accuracy, correct and every resource median, and counted separately.
 function armStats(records) {
-  const measured = records.filter((r) => !NO_USAGE.has(r.subtype));
+  const graded = records.filter((r) => !wasRateLimited(r));
+  const rateLimited = records.length - graded.length;
+  const measured = graded.filter((r) => !NO_USAGE.has(r.subtype));
   const tokens = measured.map(totalTokens);
   const cost = measured.map((r) => r.costUsd);
   const duration = measured.map((r) => r.durationMs / 1000);
-  const correct = records.filter((r) => r.correct).length;
+  const correct = graded.filter((r) => r.correct).length;
   return {
-    n: records.length,
-    failures: records.filter((r) => r.isError).length,
-    leakSuspect: records.filter((r) => r.leakSuspect).length,
+    n: graded.length,
+    rateLimited,
+    failures: graded.filter((r) => r.isError).length,
+    leakSuspect: graded.filter((r) => r.leakSuspect).length,
     correct,
-    accuracy: records.length ? correct / records.length : 0,
+    accuracy: graded.length ? correct / graded.length : 0,
     tokens: { median: median(tokens), iqr: iqr(tokens) },
     costUsd: { median: median(cost), iqr: iqr(cost) },
     durationS: { median: median(duration), iqr: iqr(duration) },
@@ -58,13 +70,15 @@ const acc = (a) => `${Math.round(a * 100)}%`;
 export function renderTable(summary, meta, summaryFile) {
   const { browser, headless } = summary.overall;
   const lines = [
-    `Model \`${meta.model}\`, ${meta.runs} runs per task per arm, ${meta.date}. Medians (runs with no result or timed out excluded); IQR in \`${summaryFile}\`.`,
+    `Model \`${meta.model}\`, ${meta.runs} runs per task per arm, ${meta.date}. Medians (runs with no result or timed out excluded); ` +
+      `rate-limited runs (blocked by the account's usage limit) excluded from n and accuracy; IQR in \`${summaryFile}\`.`,
     '',
-    '| task | n | failed | tokens (browser → headless) | saved | cost | saved | time | screenshots | accuracy |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| task | n | rate-limited | failed | tokens (browser → headless) | saved | cost | saved | time | screenshots | accuracy |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   const row = (name, p) =>
-    `| ${name} | ${p.browser.n} → ${p.headless.n} | ${p.browser.failures} → ${p.headless.failures} | ` +
+    `| ${name} | ${p.browser.n} → ${p.headless.n} | ${p.browser.rateLimited} → ${p.headless.rateLimited} | ` +
+    `${p.browser.failures} → ${p.headless.failures} | ` +
     `${k(p.browser.tokens.median)} → ${k(p.headless.tokens.median)} | ${pct(p.savedTokensPct)} | ` +
     `${usd(p.browser.costUsd.median)} → ${usd(p.headless.costUsd.median)} | ${pct(p.savedCostPct)} | ` +
     `${secs(p.browser.durationS.median)} → ${secs(p.headless.durationS.median)} | ` +

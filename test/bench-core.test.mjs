@@ -68,6 +68,66 @@ test('parseStream reads usage, cost, answer and screenshots', async () => {
   assert.equal(b.subtype, 'error_max_budget_usd');
 });
 
+const resultEvent = (fields) => JSON.stringify({ type: 'result', usage: {}, ...fields });
+
+test('parseStream classifies a run that hit the account usage limit as rate_limited', () => {
+  const r = parseStream(resultEvent({
+    subtype: 'success',
+    is_error: true,
+    result: "You've hit your session limit · resets 11:30pm (America/New_York)",
+    total_cost_usd: 0,
+    num_turns: 1,
+  }));
+  assert.equal(r.subtype, 'rate_limited');
+  assert.equal(r.isError, true);
+});
+
+test('parseStream matches rate-limit phrases case-insensitively at the start of the final text', () => {
+  const r = parseStream(resultEvent({
+    subtype: 'success',
+    is_error: true,
+    result: 'USAGE LIMIT reached, try again later.',
+    total_cost_usd: 0,
+    num_turns: 1,
+  }));
+  assert.equal(r.subtype, 'rate_limited');
+});
+
+test('parseStream treats a zero-cost, one-turn error mentioning a limit phrase anywhere as rate_limited', () => {
+  const r = parseStream(resultEvent({
+    subtype: 'success',
+    is_error: true,
+    result: 'Error: usage limit exceeded for this session',
+    total_cost_usd: 0,
+    num_turns: 1,
+  }));
+  assert.equal(r.subtype, 'rate_limited');
+});
+
+test('parseStream does NOT classify a normal successful answer that merely mentions "limit" in prose', () => {
+  const r = parseStream(resultEvent({
+    subtype: 'success',
+    is_error: false,
+    result: 'The upload widget enforces a rate limit of 5MB per file. {"works": true, "cause": "ok"}',
+    total_cost_usd: 0.15,
+    num_turns: 5,
+  }));
+  assert.equal(r.subtype, 'success');
+  assert.equal(r.isError, false);
+});
+
+test('parseStream does NOT classify a real error with real cost/turns that mentions a limit phrase mid-text', () => {
+  const r = parseStream(resultEvent({
+    subtype: 'error_during_execution',
+    is_error: true,
+    result: "I hit an error, possibly a rate limit issue but I'm not certain.",
+    total_cost_usd: 0.05,
+    num_turns: 3,
+  }));
+  assert.notEqual(r.subtype, 'rate_limited');
+  assert.equal(r.isError, true);
+});
+
 test('arm arguments isolate the tools under test', () => {
   const common = { model: 'claude-opus-5', budgetUsd: 2, pluginDir: '/repo' };
   const browser = armArgs('browser', common);

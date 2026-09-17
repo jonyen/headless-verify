@@ -65,8 +65,46 @@ test('renderTable shows n, failures, leak suspects and names the summary file', 
   const table = renderTable(summarize(extra), { model: 'm', runs: 2, date: 'd' }, 'x.summary.json');
   assert.match(table, /IQR in `x\.summary\.json`/);
   assert.match(table, /\| n \|/);
-  assert.match(table, /\| load \| 3 → 4 \| 1 → 2 \|/);
+  assert.match(table, /\| load \| 3 → 4 \| 0 → 0 \| 1 → 2 \|/);
   assert.match(table, /[Ll]eak-suspect runs: browser 0, headless 1/);
+});
+
+const rateLimited = (task, arm, run) => ({
+  task, arm, variant: 'ok', run, correct: false,
+  usage: { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 },
+  costUsd: 0, durationMs: 0, screenshots: 0, isError: true, subtype: 'rate_limited',
+});
+
+const withRateLimited = [
+  ...records,
+  rateLimited('load', 'browser', 5),
+  rateLimited('load', 'browser', 6),
+  rateLimited('load', 'headless', 5),
+];
+
+test('summarize excludes rate_limited runs from n, accuracy, correct and medians; counts them separately', () => {
+  const s = summarize(withRateLimited);
+  const { browser, headless } = s.byTask.load;
+  // n stays at the graded (non-rate-limited) run count.
+  assert.equal(browser.n, 2);
+  assert.equal(browser.rateLimited, 2);
+  assert.equal(browser.correct, 2);
+  assert.equal(browser.accuracy, 1);
+  assert.equal(headless.n, 2);
+  assert.equal(headless.rateLimited, 1);
+  assert.equal(headless.correct, 1);
+  assert.equal(headless.accuracy, 0.5);
+  // rate_limited runs (zero cost/tokens/duration) must not drag the medians down.
+  assert.equal(browser.tokens.median, 110_000);
+  assert.equal(browser.costUsd.median, 1.1);
+  assert.equal(s.overall.browser.rateLimited, 2);
+  assert.equal(s.overall.headless.rateLimited, 1);
+});
+
+test('renderTable shows rate-limited counts per arm', () => {
+  const table = renderTable(summarize(withRateLimited), { model: 'm', runs: 2, date: 'd' }, 'x.summary.json');
+  assert.match(table, /rate.?limited/i);
+  assert.match(table, /2 → 1/);
 });
 
 test('savings render n/a when the browser median is zero', () => {

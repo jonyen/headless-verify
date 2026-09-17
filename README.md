@@ -78,7 +78,11 @@ anyway are counted as leak suspects in the results. Both arms can still read the
 source, so part of any saving may come from reading code rather than running it. Runs are
 interleaved, capped with `--max-budget-usd` and a wall-clock `--timeout-min` (default 10), and
 failures and timeouts count against their arm. `report.mjs` writes per-arm IQRs next to the
-results file as `<file>.summary.json`. See
+results file as `<file>.summary.json`. If a run is blocked by the account's own usage limit
+rather than by anything the model did, the benchmark stops immediately, writes what it has so
+far, and is excluded from accuracy and the resource medians as `rate_limited`; run
+`node bench/run.mjs --resume results/<file>.json` to re-run only the blocked runs (and any
+`no_result`/`timeout` ones) and merge the fresh records back in. See
 [the design spec](docs/superpowers/specs/2026-09-16-headless-verify-design.md) for the method.
 
 ## Develop

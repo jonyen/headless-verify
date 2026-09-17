@@ -2,6 +2,27 @@
 // source, the spec or the fixture tests. A run that touches these is suspect.
 const LEAK_NEEDLES = ['variants.mjs', '/bench/', 'fixture-app', 'docs/superpowers', 'test/fixture-app'];
 
+// Phrases `claude -p` uses when a run is blocked by the account's usage/rate
+// limit rather than by anything the model did. These are infrastructure
+// failures, not model failures, so they get their own subtype.
+const RATE_LIMIT_PHRASES = ["hit your session limit", "you've hit your session limit", 'usage limit', 'rate limit', 'limit · resets'];
+
+// A run is rate_limited when either:
+//   1. the final text STARTS WITH one of the phrases (the normal shape of a
+//      limit message, e.g. "You've hit your session limit · resets ..."), or
+//   2. the result is an error with zero cost and exactly one turn (the
+//      signature of a run that never actually executed) AND a phrase appears
+//      anywhere in the final text.
+// Rule 1 alone would also match a genuine answer that merely discusses
+// "rate limit" in the middle of its prose, so that case only counts under
+// rule 2, which requires the zero-cost/one-turn signature too.
+export function isRateLimited(finalText, { isError, costUsd, turns }) {
+  const t = (finalText || '').trim().toLowerCase();
+  const startsWithPhrase = RATE_LIMIT_PHRASES.some((p) => t.startsWith(p));
+  const looksLikeBlockedRun = isError && costUsd === 0 && turns === 1 && RATE_LIMIT_PHRASES.some((p) => t.includes(p));
+  return startsWithPhrase || looksLikeBlockedRun;
+}
+
 export function parseStream(text) {
   const out = {
     finalText: '',
@@ -48,6 +69,10 @@ export function parseStream(text) {
       out.isError = Boolean(event.is_error);
       out.subtype = event.subtype ?? '';
     }
+  }
+  if (isRateLimited(out.finalText, { isError: out.isError, costUsd: out.costUsd, turns: out.turns })) {
+    out.subtype = 'rate_limited';
+    out.isError = true;
   }
   return out;
 }
