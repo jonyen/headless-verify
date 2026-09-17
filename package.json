@@ -7,7 +7,7 @@
   "author": "Jonathan Yen",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test 'test/*.test.mjs'",
+    "test": "node --test test/*.test.mjs",
     "analyze": "node analyze/session-cost.mjs",
     "bench": "node bench/run.mjs",
     "report": "node bench/report.mjs"
