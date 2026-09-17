@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture app</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="load">
+      <h2>Load items</h2>
+      <button id="load-btn" type="button">Load</button>
+      <p id="load-result"></p>
+    </section>
+
+    <section id="preview-section">
+      <h2>Timeline</h2>
+      <div class="spacer-left"></div>
+      <div id="track"></div>
+      <p>Preview: <span id="preview"></span></p>
+    </section>
+
+    <section id="captions-section">
+      <h2>Captions</h2>
+      <div id="player-slot"></div>
+      <p id="captions">
+        <span data-start="0">zero</span> <span data-start="1">one</span>
+        <span data-start="2">two</span> <span data-start="3">three</span>
+        <span data-start="4">four</span> <span data-start="5">five</span>
+      </p>
+    </section>
+
+    <section id="toolbar-section">
+      <h2>Toolbar</h2>
+      <div id="toolbar">
+        <button type="button">Remove fillers</button>
+        <button type="button">Tighten pauses</button>
+        <label id="show-cuts"><input type="checkbox" checked /> Show cuts</label>
+      </div>
+    </section>
+
+    <section id="form-section">
+      <h2>Subscribe</h2>
+      <form id="form">
+        <input id="email" type="email" placeholder="email" />
+        <button id="submit" type="submit">Save</button>
+        <p id="form-status"></p>
+      </form>
+    </section>
+
+    <script src="app.js"></script>
+  </body>
+</html>
