@@ -41,7 +41,20 @@ Screenshots are reserved for visual questions, cropped to the element and capped
 ## Results
 
 <!-- results:start -->
-Not run yet.
+Model `claude-opus-5`, 5 runs per task per arm, 2026-09-17. Medians (runs with no result or timed out excluded); rate-limited runs (blocked by the account's usage limit) excluded from n and accuracy; IQR in `2026-09-17-032324-claude-opus-5.summary.json`.
+
+| task | n | rate-limited | failed | tokens (browser → headless) | saved | cost | saved | time | screenshots | accuracy |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| load | 5 → 5 | 0 → 0 | 0 → 0 | 438.6K → 110.4K | 74.8% | $0.53 → $0.12 | 78.0% | 71s → 29s | 1 → 0 | 100% → 100% |
+| form | 5 → 5 | 0 → 0 | 0 → 0 | 423.4K → 90.1K | 78.7% | $0.48 → $0.12 | 75.9% | 79s → 24s | 1 → 0 | 100% → 100% |
+| captions | 5 → 5 | 0 → 0 | 0 → 0 | 574.0K → 93.6K | 83.7% | $0.60 → $0.15 | 75.6% | 150s → 21s | 1 → 0 | 100% → 100% |
+| toolbar | 5 → 5 | 0 → 0 | 0 → 0 | 165.8K → 94.0K | 43.3% | $0.19 → $0.14 | 26.0% | 28s → 19s | 1 → 0 | 100% → 100% |
+| preview | 5 → 5 | 0 → 0 | 0 → 0 | 279.1K → 92.7K | 66.8% | $0.35 → $0.15 | 58.4% | 52s → 19s | 0 → 0 | 100% → 100% |
+| **overall** | 25 → 25 | 0 → 0 | 0 → 0 | 337.0K → 93.0K | 72.4% | $0.44 → $0.13 | 70.1% | 65s → 21s | 1 → 0 | 100% → 100% |
+
+Leak-suspect runs: browser 0, headless 0 (a tool input mentioned the benchmark's own files).
+
+Raw data: [`results/2026-09-17-032324-claude-opus-5.json`](results/2026-09-17-032324-claude-opus-5.json) · summary with IQR: [`2026-09-17-032324-claude-opus-5.summary.json`](results/2026-09-17-032324-claude-opus-5.summary.json)
 <!-- results:end -->
 
 ## Measure your own sessions

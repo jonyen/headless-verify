@@ -1,0 +1,205 @@
+{
+  "overall": {
+    "browser": {
+      "n": 2,
+      "failures": 0,
+      "leakSuspect": 0,
+      "correct": 2,
+      "accuracy": 1,
+      "tokens": {
+        "median": 358350.5,
+        "iqr": [
+          347159.75,
+          369541.25
+        ]
+      },
+      "costUsd": {
+        "median": 0.467427,
+        "iqr": [
+          0.459013,
+          0.47584099999999996
+        ]
+      },
+      "durationS": {
+        "median": 64.469,
+        "iqr": [
+          63.0025,
+          65.9355
+        ]
+      },
+      "screenshots": {
+        "median": 0.5
+      }
+    },
+    "headless": {
+      "n": 2,
+      "failures": 0,
+      "leakSuspect": 0,
+      "correct": 2,
+      "accuracy": 1,
+      "tokens": {
+        "median": 101002,
+        "iqr": [
+          96299.5,
+          105704.5
+        ]
+      },
+      "costUsd": {
+        "median": 0.17054875,
+        "iqr": [
+          0.158536625,
+          0.182560875
+        ]
+      },
+      "durationS": {
+        "median": 37.5005,
+        "iqr": [
+          32.93875,
+          42.062250000000006
+        ]
+      },
+      "screenshots": {
+        "median": 0
+      }
+    },
+    "savedTokensPct": 71.81474561916336,
+    "savedCostPct": 63.51328656667244,
+    "savedDurationPct": 41.83173308101567
+  },
+  "byTask": {
+    "captions": {
+      "browser": {
+        "n": 1,
+        "failures": 0,
+        "leakSuspect": 0,
+        "correct": 1,
+        "accuracy": 1,
+        "tokens": {
+          "median": 335969,
+          "iqr": [
+            335969,
+            335969
+          ]
+        },
+        "costUsd": {
+          "median": 0.45059899999999997,
+          "iqr": [
+            0.45059899999999997,
+            0.45059899999999997
+          ]
+        },
+        "durationS": {
+          "median": 67.402,
+          "iqr": [
+            67.402,
+            67.402
+          ]
+        },
+        "screenshots": {
+          "median": 1
+        }
+      },
+      "headless": {
+        "n": 1,
+        "failures": 0,
+        "leakSuspect": 0,
+        "correct": 1,
+        "accuracy": 1,
+        "tokens": {
+          "median": 110407,
+          "iqr": [
+            110407,
+            110407
+          ]
+        },
+        "costUsd": {
+          "median": 0.194573,
+          "iqr": [
+            0.194573,
+            0.194573
+          ]
+        },
+        "durationS": {
+          "median": 28.377,
+          "iqr": [
+            28.377,
+            28.377
+          ]
+        },
+        "screenshots": {
+          "median": 0
+        }
+      },
+      "savedTokensPct": 67.13774187499442,
+      "savedCostPct": 56.81903421889529,
+      "savedDurationPct": 57.898875404290685
+    },
+    "load": {
+      "browser": {
+        "n": 1,
+        "failures": 0,
+        "leakSuspect": 0,
+        "correct": 1,
+        "accuracy": 1,
+        "tokens": {
+          "median": 380732,
+          "iqr": [
+            380732,
+            380732
+          ]
+        },
+        "costUsd": {
+          "median": 0.484255,
+          "iqr": [
+            0.484255,
+            0.484255
+          ]
+        },
+        "durationS": {
+          "median": 61.536,
+          "iqr": [
+            61.536,
+            61.536
+          ]
+        },
+        "screenshots": {
+          "median": 0
+        }
+      },
+      "headless": {
+        "n": 1,
+        "failures": 0,
+        "leakSuspect": 0,
+        "correct": 1,
+        "accuracy": 1,
+        "tokens": {
+          "median": 91597,
+          "iqr": [
+            91597,
+            91597
+          ]
+        },
+        "costUsd": {
+          "median": 0.1465245,
+          "iqr": [
+            0.1465245,
+            0.1465245
+          ]
+        },
+        "durationS": {
+          "median": 46.624,
+          "iqr": [
+            46.624,
+            46.624
+          ]
+        },
+        "screenshots": {
+          "median": 0
+        }
+      },
+      "savedTokensPct": 75.9418698717208,
+      "savedCostPct": 69.74228454016995,
+      "savedDurationPct": 24.23296931877275
+    }
+  }
+}

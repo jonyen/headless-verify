@@ -1,0 +1,1270 @@
+{
+  "meta": {
+    "date": "2026-09-17",
+    "model": "claude-opus-5",
+    "runs": 5,
+    "seed": 88456,
+    "budgetUsd": 2,
+    "timeoutMin": 10,
+    "claudeVersion": "2.1.274 (Claude Code)",
+    "tasks": [
+      "load",
+      "preview",
+      "captions",
+      "toolbar",
+      "form"
+    ]
+  },
+  "records": [
+    {
+      "task": "load",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "The Load button works: I reloaded the page, clicked it with the mouse, and \"Loaded 3 items\" showed up under the button.\n\nMy first two tries didn't change anything. Those clicks went through the browser tool's element reference, not screen coordinates, and the page's click counter stayed at 0, so the button's code never ran. That points to those clicks not reaching the page, not a problem in the app. The code in `app.js` just sets that text when the button is clicked, and a click triggered from JavaScript also showed it. I didn't change any files.\n\n{\"works\": true, \"cause\": \"Clicking Load runs a handler in app.js that sets the result text to 'Loaded 3 items', and a real mouse click showed that text on the page.\"}",
+      "usage": {
+        "input": 30,
+        "output": 3910,
+        "cacheCreation": 25007,
+        "cacheRead": 410948
+      },
+      "costUsd": 0.5544940000000002,
+      "durationMs": 70550,
+      "turns": 26,
+      "screenshots": 2,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "Clicking Load runs a handler in app.js that sets the result text to 'Loaded 3 items', and a real mouse click showed that text on the page."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "Yes, it works. I clicked the Load button in a headless browser and the page then showed \"Loaded 3 items\". No requests failed and no files were changed.\n\n{\"works\": true, \"cause\": \"After clicking the Load button, the page showed \\\"Loaded 3 items\\\" with no failed requests.\"}",
+      "usage": {
+        "input": 6,
+        "output": 608,
+        "cacheCreation": 7802,
+        "cacheRead": 44172
+      },
+      "costUsd": 0.11638099999999998,
+      "durationMs": 8341,
+      "turns": 4,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "After clicking the Load button, the page showed \"Loaded 3 items\" with no failed requests."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 1,
+      "finalText": "It works. I opened the page in headless Chrome and did a real mouse click in the middle of the Load button. Nothing was covering it: the element at that point was the button itself. After the click, the result text read exactly \"Loaded 3 items\". The code agrees: in `app.js`, the button's click handler sets that text directly, and nothing in `styles.css` hides or overlaps the button. I didn't change any of the app's files.\n\n{\"works\": true, \"cause\": \"The Load button's click handler in app.js sets the result text to 'Loaded 3 items', and a real click in headless Chrome showed that text.\"}",
+      "usage": {
+        "input": 16,
+        "output": 2683,
+        "cacheCreation": 6058,
+        "cacheRead": 143559
+      },
+      "costUsd": 0.2005595,
+      "durationMs": 155265,
+      "turns": 8,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The Load button's click handler in app.js sets the result text to 'Loaded 3 items', and a real click in headless Chrome showed that text."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 1,
+      "finalText": "It works: clicking Load shows \"Loaded 3 items\". I saw it on screen after reloading the page, and the handler's click counter went from 0 to 1.\n\nThree of my earlier clicks showed nothing: two right after the page loaded and one aimed at the button by its element reference. In all three the page never received the click (the counter stayed at 0), so it looks like a problem with my browser tool, not the app. The button isn't covered by anything, the script loads at the end of the page, and its handler simply puts \"Loaded 3 items\" in the result line. I didn't change any files.\n\n{\"works\": true, \"cause\": \"The Load button's click handler sets the result text to \\\"Loaded 3 items\\\", and it showed on screen after a real click.\"}",
+      "usage": {
+        "input": 28,
+        "output": 4986,
+        "cacheCreation": 22427,
+        "cacheRead": 386312
+      },
+      "costUsd": 0.5432610000000001,
+      "durationMs": 74437,
+      "turns": 31,
+      "screenshots": 3,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The Load button's click handler sets the result text to \"Loaded 3 items\", and it showed on screen after a real click."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 2,
+      "finalText": "It doesn't work on the first click. After a fresh page load, clicking Load once leaves the result empty, and only a second click shows \"Loaded 3 items\". The cause is in `app.js`: the click handler counts clicks and does nothing on the first one (`if (clickCount === 1) return;`). No network requests or console errors came from the clicks. In my first attempt the second click also showed nothing, but the clicks there were targeted by element reference, not screen position. That run is probably unreliable, and the clean retry with clicks at screen coordinates matched the code exactly. I didn't change any files, and I closed the browser tab.\n\n{\"works\": false, \"cause\": \"The click handler in app.js returns early when clickCount === 1, so the first click does nothing and \\\"Loaded 3 items\\\" only appears after a second click.\"}",
+      "usage": {
+        "input": 28,
+        "output": 3372,
+        "cacheCreation": 23774,
+        "cacheRead": 367499
+      },
+      "costUsd": 0.5069745000000001,
+      "durationMs": 58414,
+      "turns": 26,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The click handler in app.js returns early when clickCount === 1, so the first click does nothing and \"Loaded 3 items\" only appears after a second click."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 2,
+      "finalText": "It doesn't work. I clicked Load once in a headless browser, waited 15 seconds, and \"Loaded 3 items\" never appeared. The page showed no console or network errors.\n\nThe cause is in `app.js` (lines 2–7). The click handler counts clicks and returns early on the first one (`if (clickCount === 1) return;`), so the message is only set on the second click. I didn't run a second click to confirm that part, but the code is clear about it. I didn't change any files.\n\n{\"works\": false, \"cause\": \"The Load click handler in app.js returns early on the first click, so 'Loaded 3 items' only shows after a second click.\"}",
+      "usage": {
+        "input": 12,
+        "output": 983,
+        "cacheCreation": 7696,
+        "cacheRead": 101725
+      },
+      "costUsd": 0.1535025,
+      "durationMs": 30746,
+      "turns": 7,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The Load click handler in app.js returns early on the first click, so 'Loaded 3 items' only shows after a second click."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. I opened the page in a headless browser and clicked Load once. After waiting 15 seconds, \"Loaded 3 items\" still hadn't appeared and the result area was empty.\n\nThe reason is in `app.js` (lines 3–7). The click handler counts clicks and does nothing on the first one (`if (clickCount === 1) return;`). The message only appears from the second click on. I didn't change any files.\n\n{\"works\": false, \"cause\": \"The Load click handler in app.js returns early on the first click (clickCount === 1), so one click never shows 'Loaded 3 items'; only a second click does.\"}",
+      "usage": {
+        "input": 12,
+        "output": 958,
+        "cacheCreation": 3769,
+        "cacheRead": 105899
+      },
+      "costUsd": 0.1156945,
+      "durationMs": 28681,
+      "turns": 7,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The Load click handler in app.js returns early on the first click (clickCount === 1), so one click never shows 'Loaded 3 items'; only a second click does."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "I tested this with JavaScript-dispatched clicks, because the browser tool's mouse clicks never reached the page (not even a mousedown event registered). So this result comes from `b.click()` plus reading `app.js`, not from a real mouse click.\n\n**It doesn't work: the first click does nothing.** The handler in `app.js` counts clicks and exits early on the first one:\n\n```js\nclickCount += 1;\nif (clickCount === 1) return;\ndocument.getElementById('load-result').textContent = 'Loaded 3 items';\n```\n\nWhen I dispatched two clicks, \"Loaded 3 items\" appeared only after the second. A user who clicks Load once sees nothing. I didn't change any files.\n\n{\"works\": false, \"cause\": \"The Load click handler in app.js returns early when clickCount === 1, so the first click does nothing and 'Loaded 3 items' only appears on the second click.\"}",
+      "usage": {
+        "input": 30,
+        "output": 4590,
+        "cacheCreation": 20640,
+        "cacheRead": 413360
+      },
+      "costUsd": 0.529025,
+      "durationMs": 73689,
+      "turns": 27,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The Load click handler in app.js returns early when clickCount === 1, so the first click does nothing and 'Loaded 3 items' only appears on the second click."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 4,
+      "finalText": "The Load button works. When I clicked it in the browser, the page showed \"Loaded 3 items\".\n\n- **The code:** `app.js` attaches a click handler to `#load-btn` that writes exactly \"Loaded 3 items\" into `#load-result`.\n- **The check:** nothing covers the button, so a real click reaches it. After my click on the button, the text appeared and the script's click counter read 1.\n- **One oddity:** my first click, aimed through the browser tool's element reference rather than screen position, did nothing (the counter stayed at 0). I couldn't find anything in the page to explain that, so it was most likely the tool's click missing, not a fault in the app.\n\nI didn't change any files and closed the tab afterwards.\n\n{\"works\": true, \"cause\": \"app.js adds a click handler to #load-btn that sets #load-result to 'Loaded 3 items', and a real click on the button showed that text.\"}",
+      "usage": {
+        "input": 32,
+        "output": 3420,
+        "cacheCreation": 17884,
+        "cacheRead": 423816
+      },
+      "costUsd": 0.47745299999999996,
+      "durationMs": 65347,
+      "turns": 20,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "app.js adds a click handler to #load-btn that sets #load-result to 'Loaded 3 items', and a real click on the button showed that text."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 4,
+      "finalText": "It works. I ran a headless browser check against the page: clicking **Load** makes \"Loaded 3 items\" appear. There were no HTTP errors, and I didn't change any files.\n\n{\"works\": true, \"cause\": \"In a headless browser, clicking the Load button made the page show \\\"Loaded 3 items\\\" with no HTTP errors.\"}",
+      "usage": {
+        "input": 6,
+        "output": 585,
+        "cacheCreation": 2042,
+        "cacheRead": 49892
+      },
+      "costUsd": 0.06106600000000001,
+      "durationMs": 8398,
+      "turns": 4,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "In a headless browser, clicking the Load button made the page show \"Loaded 3 items\" with no HTTP errors."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "The Subscribe form works. I typed `test@example.com` into the email box, clicked Save, and \"Saved\" appeared below the button. The screenshot and the page's own state both showed it. I didn't change any files.\n\nMy first attempt looked like a failure because nothing showed up, but the email box was empty afterwards. My typing never reached the box, so the form was sent blank. The app only shows \"Saved\" when there's an email, so that result was correct.\n\nThe script in `app.js` handles the form in the browser and doesn't reload the page. When I clicked into the box first and then typed, it worked.\n\n{\"works\": true, \"cause\": \"The submit handler in app.js stops the page from reloading and shows \\\"Saved\\\" whenever the email field is filled in, which is what happened when I typed an email and clicked Save.\"}",
+      "usage": {
+        "input": 34,
+        "output": 5515,
+        "cacheCreation": 29505,
+        "cacheRead": 496865
+      },
+      "costUsd": 0.6825695,
+      "durationMs": 90889,
+      "turns": 35,
+      "screenshots": 2,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The submit handler in app.js stops the page from reloading and shows \"Saved\" whenever the email field is filled in, which is what happened when I typed an email and clicked Save."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "It works. I ran the page in a headless browser and typed `test@example.com` into the Subscribe email field. Before I pressed Save, \"Saved\" wasn't on the page. After I pressed it, \"Saved\" appeared and was visible in `#form-status`. I didn't change any files.\n\n{\"works\": true, \"cause\": \"After an email is entered and Save is pressed, the form shows a visible \\\"Saved\\\" message in #form-status that was not there before.\"}",
+      "usage": {
+        "input": 8,
+        "output": 1228,
+        "cacheCreation": 6745,
+        "cacheRead": 64020
+      },
+      "costUsd": 0.131242,
+      "durationMs": 18024,
+      "turns": 5,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "After an email is entered and Save is pressed, the form shows a visible \"Saved\" message in #form-status that was not there before."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 1,
+      "finalText": "It doesn't work. I filled in an email and clicked Save in a headless browser, and \"Saved\" never appeared, even after waiting 15 seconds. The page threw this error instead: `Cannot read properties of null (reading 'value')`.\n\nThe cause is a mismatched ID. In `app.js` at line 39, the submit handler calls `document.getElementById('e-mail')`, but the input in the HTML has `id=\"email\"`. The lookup returns null, so reading `.value` throws before the status text is set. I didn't modify any files.\n\n{\"works\": false, \"cause\": \"The submit handler in app.js looks up the input by id 'e-mail', but the input's id is 'email', so reading .value on null throws and 'Saved' is never shown.\"}",
+      "usage": {
+        "input": 12,
+        "output": 1079,
+        "cacheCreation": 6896,
+        "cacheRead": 101146
+      },
+      "costUsd": 0.14761,
+      "durationMs": 33552,
+      "turns": 7,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The submit handler in app.js looks up the input by id 'e-mail', but the input's id is 'email', so reading .value on null throws and 'Saved' is never shown."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 1,
+      "finalText": "It doesn't work. I typed `test@example.com` into the Subscribe field and pressed Save. The page didn't reload and the email stayed in the field, but \"Saved\" never appeared. Instead, the browser threw `Uncaught TypeError: Cannot read properties of null (reading 'value')`.\n\nThe cause is a typo in `app.js`. The submit handler looks for `document.getElementById('e-mail')`, but the input's id in the page is `email`. The lookup returns nothing, reading `.value` from it crashes, and the line that sets \"Saved\" never runs. I didn't change any files.\n\nThe browser tab I opened for this test is still open.\n\n{\"works\": false, \"cause\": \"The submit handler in app.js looks up getElementById('e-mail'), but the input's id is 'email', so reading .value throws a TypeError and 'Saved' is never shown.\"}",
+      "usage": {
+        "input": 24,
+        "output": 2873,
+        "cacheCreation": 21544,
+        "cacheRead": 306203
+      },
+      "costUsd": 0.44152849999999993,
+      "durationMs": 54196,
+      "turns": 16,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The submit handler in app.js looks up getElementById('e-mail'), but the input's id is 'email', so reading .value throws a TypeError and 'Saved' is never shown."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 2,
+      "finalText": "The Subscribe form works. I typed `test@example.com` into the email field, clicked Save, and \"Saved\" appeared below the form. The page didn't reload, and the email stayed in the field.\n\nMy first try showed nothing, but my typing never reached the field, so the form was never really tested. After I reloaded and clicked the elements directly instead of by screen position, the text went in and Save worked. Setting the value and clicking Save from a script also showed \"Saved\". I didn't change any of the app's files, and I couldn't read `app.js` because the browser tool blocked its output.\n\n{\"works\": true, \"cause\": \"Clicking Save runs a submit handler that stops the page from reloading and shows \\\"Saved\\\", which I confirmed by typing an email and clicking Save in the browser.\"}",
+      "usage": {
+        "input": 30,
+        "output": 5511,
+        "cacheCreation": 23373,
+        "cacheRead": 422126
+      },
+      "costUsd": 0.58376,
+      "durationMs": 88973,
+      "turns": 33,
+      "screenshots": 2,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "Clicking Save runs a submit handler that stops the page from reloading and shows \"Saved\", which I confirmed by typing an email and clicking Save in the browser."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 2,
+      "finalText": "It works. In headless Chrome, \"Saved\" wasn't on the page before I did anything. After I typed `test@example.com` into the email field of the Subscribe section and clicked Save, \"Saved\" showed up.\n\n- **No network request:** the page didn't send anything to the server when I clicked Save. The message is shown by the page itself, so this check doesn't prove the email is stored anywhere.\n- **Checkbox:** the page also has a checkbox, which was already ticked. I left it that way and didn't try it unticked.\n- **Console:** no errors were logged.\n\nI didn't change any of the app's files; the test scripts were in `/tmp`.\n\n{\"works\": true, \"cause\": \"Entering an email in the Subscribe field and clicking Save makes a visible \\\"Saved\\\" message appear, with no console errors.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1622,
+        "cacheCreation": 3045,
+        "cacheRead": 86723
+      },
+      "costUsd": 0.1154585,
+      "durationMs": 23582,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "Entering an email in the Subscribe field and clicking Save makes a visible \"Saved\" message appear, with no console errors."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. I filled in an email and clicked Save in a headless browser, and \"Saved\" never appeared (the check gave up after 15 seconds). The page threw `Cannot read properties of null (reading 'value')`.\n\nThe cause is on line 39 of `app.js`: the submit handler looks for the element `'e-mail'`, but the input in the HTML has `id=\"email\"`. The lookup finds nothing, so the handler crashes before it can show \"Saved\". I didn't change any files.\n\n{\"works\": false, \"cause\": \"The submit handler in app.js looks up `document.getElementById('e-mail')`, but the input's id is `email`, so it gets null and throws before it can show \\\"Saved\\\".\"}",
+      "usage": {
+        "input": 10,
+        "output": 940,
+        "cacheCreation": 2602,
+        "cacheRead": 86503
+      },
+      "costUsd": 0.09386349999999999,
+      "durationMs": 30478,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The submit handler in app.js looks up `document.getElementById('e-mail')`, but the input's id is `email`, so it gets null and throws before it can show \"Saved\"."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. I put `test@example.com` in the Subscribe field and pressed Save several times, and \"Saved\" never showed up.\n\nThe problem is in the Save handler in `app.js`. It looks for the email field by the id `e-mail`, but the field's id in the page is `email`. So when the form is submitted, the lookup finds nothing, the handler throws an error, and the line that writes \"Saved\" never runs. The page doesn't reload either, because the handler blocks that before the lookup fails.\n\nOne side note: when I typed into the field with simulated keystrokes, the value came out empty. Setting the value directly with a script worked, and \"Saved\" still didn't appear, so the typing issue isn't the cause.\n\nI didn't change any files, and I closed the browser tab I opened.\n\n{\"works\": false, \"cause\": \"The submit handler in app.js looks up document.getElementById('e-mail'), but the input's id is 'email', so it gets null and throws before it can set 'Saved'.\"}",
+      "usage": {
+        "input": 28,
+        "output": 3911,
+        "cacheCreation": 17972,
+        "cacheRead": 401456
+      },
+      "costUsd": 0.4794049999999999,
+      "durationMs": 78824,
+      "turns": 27,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The submit handler in app.js looks up document.getElementById('e-mail'), but the input's id is 'email', so it gets null and throws before it can set 'Saved'."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 4,
+      "finalText": "The Subscribe form doesn't work: I entered an email, pressed Save, and \"Saved\" never appeared.\n\nThe bug is in `app.js`. The Save handler looks up the input as `document.getElementById('e-mail')`, but the input's id is actually `email`. That lookup returns nothing, so reading `.value` throws `TypeError: Cannot read properties of null (reading 'value')`. The handler stops at that point and never writes \"Saved\".\n\nTo confirm, I set a value and triggered the form's submit event directly. The same error came up and the status line stayed empty. I didn't change any app files.\n\n{\"works\": false, \"cause\": \"The submit handler in app.js looks up document.getElementById('e-mail') but the input's id is 'email', so it throws a TypeError reading .value of null and never sets 'Saved'.\"}",
+      "usage": {
+        "input": 24,
+        "output": 3120,
+        "cacheCreation": 17802,
+        "cacheRead": 316018
+      },
+      "costUsd": 0.415191,
+      "durationMs": 53478,
+      "turns": 19,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The submit handler in app.js looks up document.getElementById('e-mail') but the input's id is 'email', so it throws a TypeError reading .value of null and never sets 'Saved'."
+      },
+      "correct": true
+    },
+    {
+      "task": "form",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 4,
+      "finalText": "It doesn't work. I read the page's code rather than running it in a browser, and the bug is clear from the code. The Save handler in `app.js` looks up the email field with `document.getElementById('e-mail')`, but the field's id in the page is `email`. So the lookup returns `null`, and reading `.value` from it throws a TypeError. The handler has already stopped the form's normal submit by then, so the page stays put and \"Saved\" never appears.\n\n{\"works\": false, \"cause\": \"The submit handler looks up the email field by the id 'e-mail' but the field's id is 'email', so reading its value throws a TypeError before 'Saved' can be shown.\"}",
+      "usage": {
+        "input": 6,
+        "output": 508,
+        "cacheCreation": 1767,
+        "cacheRead": 49143
+      },
+      "costUsd": 0.0560185,
+      "durationMs": 8521,
+      "turns": 3,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The submit handler looks up the email field by the id 'e-mail' but the field's id is 'email', so reading its value throws a TypeError before 'Saved' can be shown."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 0,
+      "finalText": "Caption highlighting doesn't work.\n\nIn the HTML the server actually sends, `#player-slot` is empty. When `app.js` runs, `document.getElementById('clip')` finds nothing and returns `null`. So `earlyVideo?.addEventListener('timeupdate', …)` quietly does nothing. The script then builds a new `<video id=\"clip\">` and puts it in the slot, but never adds a `timeupdate` listener to that new element. That means `highlight()` never runs.\n\nWhat I checked in the page:\n- **DOM:** there's only one video, the one the script created, and no caption has the `active` class.\n- **Playback:** I couldn't watch it live. The video never loaded in the automation tab (`readyState` stayed at 0), even though `clip.mp4` returns 200 as `video/mp4`. My conclusion comes from reading the code and the served HTML, not from watching a highlight fail during playback.\n\nI didn't change any files.\n\n{\"works\": false, \"cause\": \"app.js adds the timeupdate listener to a #clip video that isn't in the page yet (the player slot is empty), so the call does nothing, and the video it then creates never gets a listener, so the highlight never runs.\"}",
+      "usage": {
+        "input": 24,
+        "output": 4038,
+        "cacheCreation": 19904,
+        "cacheRead": 282421
+      },
+      "costUsd": 0.4423924999999999,
+      "durationMs": 119658,
+      "turns": 13,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "app.js adds the timeupdate listener to a #clip video that isn't in the page yet (the player slot is empty), so the call does nothing, and the video it then creates never gets a listener, so the highlight never runs."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 0,
+      "finalText": "It doesn't work. I played the video in headless Chrome and it got past 2.5 s, but no caption word was ever highlighted.\n\nThe bug is in `app.js`. It looks up the video with `document.getElementById('clip')` before the video element has been created. That lookup returns `null`, so `earlyVideo?.addEventListener('timeupdate', …)` does nothing, and `highlight()` never runs. The video that actually gets added to the page has no listener.\n\n{\"works\": false, \"cause\": \"The timeupdate listener is attached to the result of getElementById('clip') before the video element exists, so it is null, the listener is never added, and highlight() never runs.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1120,
+        "cacheCreation": 7997,
+        "cacheRead": 83869
+      },
+      "costUsd": 0.1510265,
+      "durationMs": 29766,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The timeupdate listener is attached to the result of getElementById('clip') before the video element exists, so it is null, the listener is never added, and highlight() never runs."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 1,
+      "finalText": "It works. I ran the page in headless Chrome. The 6-second video loaded, and I muted it, jumped to 2.5 s and let it play. At 2.5 s only \"two\" was highlighted. After 3.2 s the highlighted word still matched the current second. The highlight showed up with its yellow background (`rgb(253, 224, 71)`). The code updates the highlight each time the video's playback position changes and after each jump.\n\n{\"works\": true, \"cause\": \"When the video plays or jumps, the page highlights only the word whose start second equals the rounded-down current time, and in headless Chrome the highlighted word matched the playing second.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1516,
+        "cacheCreation": 8336,
+        "cacheRead": 83704
+      },
+      "costUsd": 0.164214,
+      "durationMs": 18613,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "When the video plays or jumps, the page highlights only the word whose start second equals the rounded-down current time, and in headless Chrome the highlighted word matched the playing second."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 1,
+      "finalText": "I think the highlighting works, but I couldn't watch it happen during real playback. In this automated Chrome session the video never loaded (`readyState` stayed at 0 and the time never moved past 0:00). A brand-new test video with the same file stalled the same way, so the problem looks like this browser, not the app.\n\n- **File:** `clip.mp4` downloads fine (status 200, `video/mp4`, 80,893 bytes). Partial range requests work too. It's a normal H.264/AAC MP4 and 6 seconds long, which matches the six caption words.\n- **Wiring:** `app.js` builds the `#clip` video in code and adds it to the page. It calls `highlight(video.currentTime)` on `timeupdate` and `seeked`, and highlights the word whose `data-start` matches the current whole second. Only one video is on the page, so the listeners are on the video people actually play.\n- **Behaviour:** When I clicked play, one time update fired at 0s and \"zero\" got highlighted. I then sent fake time updates at 0.4, 1.2, 2.9, 3.5 and 5.1 seconds. Each time exactly one word was highlighted and it was the right one: zero, one, two, three, five. The highlighted word gets the yellow `#fde047` background from `styles.css`; the others have none.\n\nI didn't change any app files. The only edits were temporary ones in the open page: a test video I removed and a fake time value I deleted afterwards.\n\n{\"works\": true, \"cause\": \"app.js updates the highlight from video.currentTime on every timeupdate/seeked event, and in testing the right word got the yellow .active background at each second, though real playback couldn't be watched because this browser never loaded the video.\"}",
+      "usage": {
+        "input": 34,
+        "output": 5752,
+        "cacheCreation": 23778,
+        "cacheRead": 437280
+      },
+      "costUsd": 0.601447,
+      "durationMs": 137034,
+      "turns": 20,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "app.js updates the highlight from video.currentTime on every timeupdate/seeked event, and in testing the right word got the yellow .active background at each second, though real playback couldn't be watched because this browser never loaded the video."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 2,
+      "finalText": "The highlighting code looks correct, but I couldn't watch it during real playback. The browser I was using wouldn't load any media: the video stayed at \"no data loaded\" (`readyState` 0), and so did a plain generated WAV file. So the page never actually played.\n\nWhat I did confirm:\n- **The video file is fine.** `clip.mp4` returns 200 and handles partial (range) requests. It's a normal H.264/AAC MP4 that is 6 seconds long, one second for each caption word (`zero` to `five`, starting at 0–5 s).\n- **The code is wired up correctly.** `app.js` (lines 17–32) creates the video, adds it to the page, and runs `highlight(video.currentTime)` on the `timeupdate` and `seeked` events. That function gives the `active` class to the span whose start second equals the rounded-down current time. Nothing else in `app.js` touches the video or the captions.\n- **The highlight shows up.** I faked a current time of 2.5 s on the page's video and sent it a `timeupdate` event. Only the `two` word got `active`, and it turned yellow (`#fde047`) as `styles.css` says it should.\n\nI didn't change any app files, and I closed the tab when I was done.\n\n{\"works\": true, \"cause\": \"On each timeupdate/seeked event, app.js marks the span whose start second equals floor(currentTime) as active, and a simulated event at 2.5s turned only 'two' yellow, though real playback couldn't be tested because this browser wouldn't load any media.\"}",
+      "usage": {
+        "input": 44,
+        "output": 7247,
+        "cacheCreation": 21219,
+        "cacheRead": 608054
+      },
+      "costUsd": 0.698674,
+      "durationMs": 160227,
+      "turns": 23,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "On each timeupdate/seeked event, app.js marks the span whose start second equals floor(currentTime) as active, and a simulated event at 2.5s turned only 'two' yellow, though real playback couldn't be tested because this browser wouldn't load any media."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 2,
+      "finalText": "I tested this in headless Chrome without changing any files, and it works. The video loads fine (a 6-second clip). I jumped to 0.5 s, 2.5 s and 4.2 s, and each time the right word was highlighted: \"zero\", \"two\" and \"four\". Then I let it play, and at about 5.36 s \"five\" was highlighted with the yellow background. The script sets the highlight whenever the playback time changes or the video jumps to a new spot, and the page's CSS gives highlighted words the yellow background.\n\n{\"works\": true, \"cause\": \"The script highlights the caption whose start second matches the rounded-down playback time on every time update and jump, and in headless Chrome the right word turned yellow at each time tested.\"}",
+      "usage": {
+        "input": 12,
+        "output": 1645,
+        "cacheCreation": 5117,
+        "cacheRead": 106215
+      },
+      "costUsd": 0.14651950000000002,
+      "durationMs": 19396,
+      "turns": 8,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The script highlights the caption whose start second matches the rounded-down playback time on every time update and jump, and in headless Chrome the right word turned yellow at each time tested."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. I ran the page in headless Chrome, jumped the video to 2.5 s and let it play. The video kept going past 2.8 s, but no caption word was ever highlighted.\n\nThe cause is in `app.js`: it looks up `#clip` before the video element has been created, so `earlyVideo` is `null`. The `timeupdate` listener is attached with `earlyVideo?.addEventListener`, so it is silently never registered on the real video, and `highlight()` never runs.\n\n{\"works\": false, \"cause\": \"app.js attaches the timeupdate listener to a #clip element it looks up before the video is created, so that lookup returns null and highlight() is never called during playback.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1054,
+        "cacheCreation": 3842,
+        "cacheRead": 87778
+      },
+      "costUsd": 0.10977599999999998,
+      "durationMs": 28515,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "app.js attaches the timeupdate listener to a #clip element it looks up before the video is created, so that lookup returns null and highlight() is never called during playback."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. The word for the current second never gets highlighted.\n\n- **What I saw:** In this Chrome tab the video never loaded, so I couldn't watch real playback. Instead I faked the video's current time at 11 points between 0 and 5.2 seconds and fired the video's time-update event each time. Not one caption word was highlighted at any of them.\n- **Why:** `index.html` has an empty `#player-slot`, and `app.js` creates the video and inserts it there. But `app.js` looks up `#clip` into `earlyVideo` before that video exists, so the lookup returns null.\n- **Why it fails silently:** It attaches the listener with `earlyVideo?.addEventListener('timeupdate', …)`. Since `earlyVideo` is null, that line quietly does nothing and nothing shows in the console.\n\nA tool filter blocked the full text of `app.js`. I pieced this together by searching the file for keywords and reading short snippets, but that was enough to show the order problem. I didn't change any app files.\n\n{\"works\": false, \"cause\": \"app.js looks up #clip into earlyVideo before it creates and inserts the video, so earlyVideo is null and the optional-chained timeupdate listener is never attached.\"}",
+      "usage": {
+        "input": 62,
+        "output": 11520,
+        "cacheCreation": 29330,
+        "cacheRead": 967190
+      },
+      "costUsd": 1.0662569999999998,
+      "durationMs": 250129,
+      "turns": 34,
+      "screenshots": 4,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "app.js looks up #clip into earlyVideo before it creates and inserts the video, so earlyVideo is null and the optional-chained timeupdate listener is never attached."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 4,
+      "finalText": "The highlighting code works, but I couldn't watch it during real playback. The video never loaded in my browser tab, which was running in the background, so its playback position never moved on its own.\n\n- **Setup:** `app.js` creates the `#clip` video and puts it in the player area. It updates the highlight whenever the playback time changes or a seek finishes. The update marks the word whose start second matches the current whole second, and `styles.css` gives that word a yellow background.\n- **The video file:** `clip.mp4` is served correctly (a valid 6-second MP4), so the six words zero to five cover the whole clip. A second test copy of the video in the same tab also failed to load, which points to the background tab rather than the file.\n- **Simulated playback:** I faked the playback time on the page's own video and sent its time-update event. At 0.2, 1.5, 2.9, 4.1 and 5.7 seconds, exactly one word lit up each time: zero, one, two, four and five. Nothing else in `app.js` replaces the video or the captions afterwards.\n\nI didn't change any app files, and I closed the tab when I was done.\n\n{\"works\": true, \"cause\": \"The video sends its time updates to a function that highlights the word whose start second equals the rounded-down playback time, and simulated times from 0.2 to 5.7 seconds each highlighted the right word, though real playback couldn't be observed because the video never loaded in the background tab.\"}",
+      "usage": {
+        "input": 40,
+        "output": 6591,
+        "cacheCreation": 15920,
+        "cacheRead": 551462
+      },
+      "costUsd": 0.6009730000000001,
+      "durationMs": 150360,
+      "turns": 22,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The video sends its time updates to a function that highlights the word whose start second equals the rounded-down playback time, and simulated times from 0.2 to 5.7 seconds each highlighted the right word, though real playback couldn't be observed because the video never loaded in the background tab."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 4,
+      "finalText": "The caption highlighting works. I tested it in headless Chrome without changing any app files:\n\n- The 6-second video loads.\n- Jumping to 3.4 s highlights only the word \"three\".\n- When I restarted from 0 and let it play, the highlight moved along with the video: at 2.14 s only \"two\" was highlighted.\n\nIn the code, `app.js` listens for the video's time updates and seeks. It then marks the word whose start second matches the current whole second, and `styles.css` gives that word a yellow background.\n\n{\"works\": true, \"cause\": \"When the video plays or jumps, app.js highlights the caption word whose start second equals the current whole second, and a headless Chrome test showed the right word lit at 3.4 s and at 2.14 s.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1468,
+        "cacheCreation": 4974,
+        "cacheRead": 89279
+      },
+      "costUsd": 0.1321965,
+      "durationMs": 20806,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "When the video plays or jumps, app.js highlights the caption word whose start second equals the current whole second, and a headless Chrome test showed the right word lit at 3.4 s and at 2.14 s."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "Yes, it works. All three controls sit inside the toolbar's border, and the screenshot confirms it.\n\n- **Layout:** The toolbar is a wrapping flex row 260px wide. \"Remove fillers\" and \"Tighten pauses\" fit on the first line. The \"Show cuts\" label drops to a second line.\n- **Box grows to fit:** The toolbar has no fixed height and doesn't clip its contents, so it gets taller to hold that second line.\n- **Measured positions:** The border box runs from x 24 to 302 and y 576 to 643. The \"Show cuts\" label runs from x 33 to 132 and y 615 to 634, which is inside the border and even inside the 8px padding.\n\nI didn't change any files; I only measured the page in the browser.\n\n{\"works\": true, \"cause\": \"The toolbar is a wrapping flex container with no fixed height or clipping, so the \\\"Show cuts\\\" label moves to a second line and the bordered box grows to hold it.\"}",
+      "usage": {
+        "input": 14,
+        "output": 2370,
+        "cacheCreation": 18430,
+        "cacheRead": 147951
+      },
+      "costUsd": 0.31865150000000003,
+      "durationMs": 36157,
+      "turns": 8,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The toolbar is a wrapping flex container with no fixed height or clipping, so the \"Show cuts\" label moves to a second line and the bordered box grows to hold it."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "Everything in the toolbar sits inside its border. I checked this in a headless browser at a 1280 px wide window by measuring where each control is drawn.\n\n- **Toolbar border box:** left 24, top 602, right 302, bottom 668 (px). It has a 1px border, is a flex container set to wrap, and is 260px wide.\n- **Controls:** the two buttons, the \"Show cuts\" label and its checkbox all fall within that box, and none overflow.\n- **\"Show cuts\" label:** it wraps onto a second row (left 33, top 640, right 132, bottom 659), and the toolbar grows taller to hold it.\n\nI only tested that one window width and didn't change any files.\n\n{\"works\": true, \"cause\": \"The toolbar is a wrapping flex container, so the \\\"Show cuts\\\" label moves to a second row inside the border and no control extends past the toolbar's edges.\"}",
+      "usage": {
+        "input": 8,
+        "output": 1632,
+        "cacheCreation": 7334,
+        "cacheRead": 64558
+      },
+      "costUsd": 0.147515,
+      "durationMs": 18611,
+      "turns": 5,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The toolbar is a wrapping flex container, so the \"Show cuts\" label moves to a second row inside the border and no control extends past the toolbar's edges."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 1,
+      "finalText": "The toolbar works: every control sits inside its border. I checked it in a headless browser by measuring the page, and changed no files.\n\n- **Toolbar box:** it spans 24–302px across and 602.4–668.4px down, with a 1px border. Its content doesn't overflow in either direction.\n- **Buttons:** \"Remove fillers\" and \"Tighten pauses\" sit on the first row, 611–632px down, inside the border.\n- **\"Show cuts\" label:** it wraps onto a second row at 640–659px down and 33–132px across, still inside the border. The label's text also stays within those bounds.\n- **Nothing is pulled out of place:** no element inside the toolbar extends past its edges, and the label has no positioning, negative margin, transform or float.\n\nI only measured at the default headless window size; the toolbar has a fixed 260px width, so other window sizes shouldn't change this.\n\n{\"works\": true, \"cause\": \"The toolbar wraps its controls, so the 'Show cuts' label moves to a second row and every control's box and text stays inside the toolbar's border.\"}",
+      "usage": {
+        "input": 10,
+        "output": 2249,
+        "cacheCreation": 4159,
+        "cacheRead": 87894
+      },
+      "costUsd": 0.142868,
+      "durationMs": 25254,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The toolbar wraps its controls, so the 'Show cuts' label moves to a second row and every control's box and text stays inside the toolbar's border."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 1,
+      "finalText": "It works. The toolbar is a 260px-wide flex container that wraps its contents onto a new line. The two buttons fit on the first row, and the \"Show cuts\" label wraps to a second row. I measured every control and all of them sit within the toolbar's box (left 24 to right 302, top 576 to bottom 643 px). A zoomed screenshot shows the same thing, with the label inside the border. I didn't change any files.\n\n{\"works\": true, \"cause\": \"The fixed-width toolbar wraps its contents, so the \\\"Show cuts\\\" label drops to a second row that stays inside the border.\"}",
+      "usage": {
+        "input": 14,
+        "output": 1758,
+        "cacheCreation": 6939,
+        "cacheRead": 157087
+      },
+      "costUsd": 0.19301449999999998,
+      "durationMs": 28196,
+      "turns": 7,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The fixed-width toolbar wraps its contents, so the \"Show cuts\" label drops to a second row that stays inside the border."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 2,
+      "finalText": "It doesn't work: the \"Show cuts\" label spills out past the toolbar's right border. I checked this by measuring the page in the browser and didn't change any files.\n\n- **Where the border ends:** the toolbar is limited to 260px wide by `max-width: 260px`, so its right border sits at about x=302.\n- **Where the controls end:** the \"Remove fillers\" button, the \"Tighten pauses\" button and the \"Show cuts\" label add up to more than that width. The label ends at about x=355, roughly 53px past the border.\n- **Why nothing adjusts:** the toolbar uses `flex-wrap: nowrap`, so the controls can't move to a second line. Each control also has `white-space: nowrap`, so they can't shrink to fit either.\n\nThe browser tab I opened for this is still open.\n\n{\"works\": false, \"cause\": \"The toolbar is capped at max-width 260px and neither the row nor the controls can wrap (flex-wrap: nowrap, white-space: nowrap), so the 'Show cuts' label sticks out about 53px past the right border.\"}",
+      "usage": {
+        "input": 12,
+        "output": 1848,
+        "cacheCreation": 15924,
+        "cacheRead": 122832
+      },
+      "costUsd": 0.26796699999999996,
+      "durationMs": 28213,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The toolbar is capped at max-width 260px and neither the row nor the controls can wrap (flex-wrap: nowrap, white-space: nowrap), so the 'Show cuts' label sticks out about 53px past the right border."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 2,
+      "finalText": "It doesn't work. I loaded the page in a headless browser and measured where each control sits. The \"Show cuts\" label spills past the toolbar's right border by about 53px: the label ends at x=355, while the toolbar box ends at x=302. The two buttons fit inside.\n\nThe cause is in `styles.css` line 7: `#toolbar` has `max-width: 260px` and `flex-wrap: nowrap`. Line 8 also sets `white-space: nowrap` on the controls. So the three controls can't wrap or shrink, and together they're wider than the toolbar allows. I didn't change any files.\n\n{\"works\": false, \"cause\": \"#toolbar is capped at max-width: 260px with flex-wrap: nowrap and its controls use white-space: nowrap, so the 'Show cuts' label spills about 53px past the toolbar's right border.\"}",
+      "usage": {
+        "input": 12,
+        "output": 1455,
+        "cacheCreation": 7463,
+        "cacheRead": 102589
+      },
+      "costUsd": 0.16341050000000001,
+      "durationMs": 17612,
+      "turns": 7,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "#toolbar is capped at max-width: 260px with flex-wrap: nowrap and its controls use white-space: nowrap, so the 'Show cuts' label spills about 53px past the toolbar's right border."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. I loaded the page in headless Chrome at 1280px wide and measured each control against the toolbar's box.\n\n- **The toolbar:** it's a flex row with a 1px grey border, a fixed width of 260px, and no wrapping (`flex-wrap: nowrap`). On screen its border runs from x=24 to x=302.\n- **The buttons:** \"Remove fillers\" and \"Tighten pauses\" end at x=248, so both fit inside.\n- **\"Show cuts\" label:** it starts at x=256 and ends at x=355, so it sticks about 53px past the right border. The label text can't wrap (`white-space: nowrap`), and the content is 330px wide but the toolbar only has 276px of room inside.\n\nI didn't change any files.\n\n{\"works\": false, \"cause\": \"The toolbar is fixed at 260px wide and can't wrap, so the \\\"Show cuts\\\" label overflows about 53px past its right border (x=355 vs x=302).\"}",
+      "usage": {
+        "input": 8,
+        "output": 1714,
+        "cacheCreation": 3536,
+        "cacheRead": 68754
+      },
+      "costUsd": 0.113678,
+      "durationMs": 19408,
+      "turns": 5,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The toolbar is fixed at 260px wide and can't wrap, so the \"Show cuts\" label overflows about 53px past its right border (x=355 vs x=302)."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "No, it doesn't work. The toolbar's border ends at x=302px, but the \"Show cuts\" label runs from x=256 to x=355. That leaves about 53px of the label hanging outside the right border. The two buttons do fit inside.\n\nThe toolbar (`#toolbar`) has a fixed width of 260px and lays its items out in a single row that can't wrap (`flex-wrap: nowrap`). Its contents also can't break across lines (`white-space: nowrap`), and overflow is left visible. Together, the three controls are wider than the box, so the last one spills out. I measured this in the page and didn't change any files.\n\n{\"works\": false, \"cause\": \"The #toolbar is a fixed 260px-wide single-row flex container that can't wrap, so the 'Show cuts' label (x 256–355px) spills past the toolbar's right border at 302px.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1256,
+        "cacheCreation": 5883,
+        "cacheRead": 107348
+      },
+      "costUsd": 0.14501,
+      "durationMs": 21260,
+      "turns": 5,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The #toolbar is a fixed 260px-wide single-row flex container that can't wrap, so the 'Show cuts' label (x 256–355px) spills past the toolbar's right border at 302px."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 4,
+      "finalText": "No, it doesn't work. The \"Show cuts\" label spills out past the right edge of the toolbar's border.\n\n- **What I measured:** the toolbar's border runs from x=24 to x=302. The two buttons fit inside, but the label ends at x=355, about 53px outside the border. A zoomed screenshot shows the same thing.\n- **Why:** `#toolbar` is a flex row limited to `max-width: 260px` with `flex-wrap: nowrap`. Every button and label also has `white-space: nowrap`, so nothing can wrap or shrink. The three controls plus gaps and padding need more than 260px, and the row can't move the label to a second line, so it spills out.\n\nI didn't change any files.\n\n{\"works\": false, \"cause\": \"The #toolbar is limited to max-width 260px with flex-wrap: nowrap and its controls can't wrap their text, so the 'Show cuts' label spills about 53px past the toolbar's right border.\"}",
+      "usage": {
+        "input": 14,
+        "output": 1770,
+        "cacheCreation": 3175,
+        "cacheRead": 161483
+      },
+      "costUsd": 0.15786750000000002,
+      "durationMs": 27230,
+      "turns": 7,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The #toolbar is limited to max-width 260px with flex-wrap: nowrap and its controls can't wrap their text, so the 'Show cuts' label spills about 53px past the toolbar's right border."
+      },
+      "correct": true
+    },
+    {
+      "task": "toolbar",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 4,
+      "finalText": "It doesn't work. I loaded the page in a headless browser and measured where each control sits. The toolbar (`#toolbar`) is fixed at 260px wide, doesn't wrap, and spans x=24 to 302. Its bordered box ends at x=302.\n\n- **\"Remove fillers\" and \"Tighten pauses\":** both fit inside the border.\n- **The checkbox:** also inside (x=260 to 273).\n- **The \"Show cuts\" label:** runs from x=256 to 355, so it sticks out past the right border by about 53px. It has `white-space: nowrap` and `min-width: auto`, so it can't shrink or wrap, and the toolbar's `overflow: visible` lets it spill out.\n\nI didn't change any files.\n\n{\"works\": false, \"cause\": \"The toolbar is a fixed 260px, non-wrapping flex row, and the nowrap \\\"Show cuts\\\" label can't shrink, so it runs past the toolbar's right border by about 53px (right edge at 355px vs 302px).\"}",
+      "usage": {
+        "input": 10,
+        "output": 1789,
+        "cacheCreation": 4058,
+        "cacheRead": 88116
+      },
+      "costUsd": 0.130469,
+      "durationMs": 20937,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The toolbar is a fixed 260px, non-wrapping flex row, and the nowrap \"Show cuts\" label can't shrink, so it runs past the toolbar's right border by about 53px (right edge at 355px vs 302px)."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "The Timeline hover works. I moved a real mouse pointer over the bar twice. The bar is 400px wide and its left edge sits at 148px. At 348px (halfway) the Preview showed \"0:30\". At 198px it showed \"0:07\", which matches (198 − 148) / 400 × 60 ≈ 7.5 seconds, rounded to 7. The code in `app.js` works the same way: it takes the pointer's distance from the bar's left edge, divides by the bar's width, and multiplies by 60. Nothing covers the bar, and nothing on the page scales or shifts it. I didn't change any files, and I closed the tab when I was done.\n\n{\"works\": true, \"cause\": \"The mousemove handler computes (clientX - rect.left) / rect.width * 60 against the track's own bounding rect, and real hovers at 50% and ~12% of the bar showed the matching times 0:30 and 0:07.\"}",
+      "usage": {
+        "input": 24,
+        "output": 3099,
+        "cacheCreation": 19891,
+        "cacheRead": 287922
+      },
+      "costUsd": 0.42153799999999997,
+      "durationMs": 64803,
+      "turns": 15,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The mousemove handler computes (clientX - rect.left) / rect.width * 60 against the track's own bounding rect, and real hovers at 50% and ~12% of the bar showed the matching times 0:30 and 0:07."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "Yes, it works. I loaded the page in headless Chrome and moved the mouse across the bar at 2%, 25%, 50%, 75% and 98% of its width. The Preview text read 0:01, 0:15, 0:30, 0:45 and 0:59, which is exactly right each time. Nothing else was covering the bar at those points.\n\nThe code measures the pointer from the bar's own left edge, so the 120px spacer to its left doesn't shift the time. It rounds to the nearest second and caps the value at 0–60, so the right edge shows 1:00. I didn't hover the exact left and right edges; those two values come from reading the code. No app files were changed.\n\n{\"works\": true, \"cause\": \"The mousemove handler measures the pointer from the bar's own left edge and scales it to 0–60 seconds, and hovering at 2–98% of the bar showed the correct times (0:01 to 0:59).\"}",
+      "usage": {
+        "input": 10,
+        "output": 1147,
+        "cacheCreation": 7989,
+        "cacheRead": 83600
+      },
+      "costUsd": 0.15148199999999998,
+      "durationMs": 13764,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The mousemove handler measures the pointer from the bar's own left edge and scales it to 0–60 seconds, and hovering at 2–98% of the bar showed the correct times (0:01 to 0:59)."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 1,
+      "finalText": "It doesn't work. I hovered the bar in a headless browser and the times came out wrong:\n\n| Pointer position on the bar | Expected | Shown |\n| --- | --- | --- |\n| 10% | 0:06 | 0:28 |\n| 50% | 0:30 | 0:52 |\n| 90% | 0:54 | 1:00 |\n\nThe bug is in `app.js` at line 13: it uses `e.clientX`, the pointer's distance from the left edge of the window. It should use `e.clientX - rect.left`, the distance from the bar's own left edge. The bar starts 148px from the window edge, so every reading is about 22 seconds too late, and it hits 1:00 before the pointer reaches the right end. I didn't change any files.\n\n{\"works\": false, \"cause\": \"The mousemove handler uses e.clientX without subtracting the bar's left offset (rect.left ≈ 148px), so every preview time is about 22 seconds too late and reaches 1:00 before the right edge.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1080,
+        "cacheCreation": 7606,
+        "cacheRead": 83460
+      },
+      "costUsd": 0.145912,
+      "durationMs": 31338,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The mousemove handler uses e.clientX without subtracting the bar's left offset (rect.left ≈ 148px), so every preview time is about 22 seconds too late and reaches 1:00 before the right edge."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 1,
+      "finalText": "It doesn't work. The bar is 400px wide, and its left edge sits 148px from the left side of the page.\n\n- **Pointer 25% along the bar** (100px in): Preview showed **0:37** when it should show 0:15.\n- **Pointer 75% along the bar** (300px in, confirmed by the mouse event): Preview showed **1:00** when it should show 0:45.\n\nBoth readings fit a calculation that measures the pointer from the left edge of the page instead of from the bar. For example, 248px ÷ 400px × 60 ≈ 0:37, and at 448px the result goes past the end and stops at 1:00. I couldn't read the app's script, so this cause comes from the numbers, not from the code. I didn't change any files.\n\n{\"works\": false, \"cause\": \"The preview time seems to be based on the pointer's distance from the page's left edge rather than the bar's, so hovering 25% along the bar shows 0:37 instead of 0:15 and 75% shows 1:00 instead of 0:45.\"}",
+      "usage": {
+        "input": 20,
+        "output": 2305,
+        "cacheCreation": 17836,
+        "cacheRead": 227966
+      },
+      "costUsd": 0.35114,
+      "durationMs": 48496,
+      "turns": 13,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The preview time seems to be based on the pointer's distance from the page's left edge rather than the bar's, so hovering 25% along the bar shows 0:37 instead of 0:15 and 75% shows 1:00 instead of 0:45."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 2,
+      "finalText": "The Timeline hover works. I moved the real mouse over the bar at three points, and the Preview text showed the right time each time:\n- 25% of the way across: 0:15\n- halfway: 0:30\n- 75% of the way across: 0:45\n\nThe code backs this up. It subtracts the bar's left edge from the pointer position, divides by the bar's width and multiplies by 60 seconds. The space to the left of the bar doesn't throw it off. I didn't change any files, and I closed the browser tab when I was done.\n\n{\"works\": true, \"cause\": \"The mousemove handler measures the pointer from the bar's left edge and scales it by the bar's width to 0–60 seconds, and hovering at 25%, 50% and 75% showed 0:15, 0:30 and 0:45.\"}",
+      "usage": {
+        "input": 24,
+        "output": 2744,
+        "cacheCreation": 10366,
+        "cacheRead": 295419
+      },
+      "costUsd": 0.32115649999999996,
+      "durationMs": 61476,
+      "turns": 15,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The mousemove handler measures the pointer from the bar's left edge and scales it by the bar's width to 0–60 seconds, and hovering at 25%, 50% and 75% showed 0:15, 0:30 and 0:45."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 2,
+      "finalText": "It works. I hovered the Timeline bar in headless Chrome at 2%, 25%, 50%, 75% and 99% of its width, and Preview showed 0:01, 0:15, 0:30, 0:45 and 0:59. Those are the right times for a bar that runs from 0:00 to 1:00. The pointer was over the bar itself each time, with nothing covering it.\n\nThe bar starts about 148px from the left of the page because of the spacer before it. That doesn't throw the time off: `app.js` measures from the bar's own left edge on every mouse move, clamps the result to 0–60 seconds, and formats it as m:ss. I didn't change any app files. To run the test, I installed Playwright in a temporary folder in `/tmp`.\n\n{\"works\": true, \"cause\": \"The mousemove handler measures the pointer from the bar's own left edge, so hovering at 2%, 25%, 50%, 75% and 99% of the bar showed 0:01, 0:15, 0:30, 0:45 and 0:59 as expected.\"}",
+      "usage": {
+        "input": 12,
+        "output": 1562,
+        "cacheCreation": 3544,
+        "cacheRead": 105068
+      },
+      "costUsd": 0.128151,
+      "durationMs": 18914,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The mousemove handler measures the pointer from the bar's own left edge, so hovering at 2%, 25%, 50%, 75% and 99% of the bar showed 0:01, 0:15, 0:30, 0:45 and 0:59 as expected."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. The page's script (`app.js`) works out the time from the pointer's position in the whole window (`e.clientX`), not its position on the bar. It never subtracts the bar's left offset (`rect.left`). The styles put the bar about 148px from the window's left edge: 24px of page margin, a 120px spacer and a space. So when you hover the bar's left edge, the Preview shows about 0:22 instead of 0:00. It reaches 1:00 and stays there for roughly the right third of the bar.\n\nI found this by reading the page's HTML, script and styles. I didn't hover in a real browser, and I didn't change any files.\n\n{\"works\": false, \"cause\": \"The mousemove handler uses e.clientX without subtracting the track's rect.left, so the ~148px offset makes the bar's left edge show about 0:22 and the preview stick at 1:00 across the right part of the bar.\"}",
+      "usage": {
+        "input": 6,
+        "output": 598,
+        "cacheCreation": 7583,
+        "cacheRead": 43475
+      },
+      "costUsd": 0.11361249999999999,
+      "durationMs": 9872,
+      "turns": 3,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The mousemove handler uses e.clientX without subtracting the track's rect.left, so the ~148px offset makes the bar's left edge show about 0:22 and the preview stick at 1:00 across the right part of the bar."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 3,
+      "finalText": "It doesn't work. The Timeline bar starts 148px from the left of the page and is 400px wide. When I sent pointer movements over the bar, the Preview showed \"0:23\" near the left edge (it should be about 0:01) and \"0:52\" at the middle (it should be 0:30).\n\nThe cause is in the bar's `mousemove` handler: it works out the position with `x = e.clientX`, which is measured from the page's left edge, not the bar's. Subtracting the bar's left position (`e.clientX - rect.left`) would fix it. I didn't change any app files.\n\n{\"works\": false, \"cause\": \"The mousemove handler uses e.clientX without subtracting the bar's left offset (148px), so the Preview shows 0:23 at the bar's left edge and 0:52 at its middle instead of 0:00 and 0:30.\"}",
+      "usage": {
+        "input": 14,
+        "output": 1586,
+        "cacheCreation": 15970,
+        "cacheRead": 147076
+      },
+      "costUsd": 0.274028,
+      "durationMs": 34049,
+      "turns": 7,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The mousemove handler uses e.clientX without subtracting the bar's left offset (148px), so the Preview shows 0:23 at the bar's left edge and 0:52 at its middle instead of 0:00 and 0:30."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 4,
+      "finalText": "The Timeline hover works. The bar is 400px wide with no transform, zoom, padding or border, and nothing covers it. I moved a real mouse pointer over it at three spots and the Preview text matched each time:\n\n| Pointer position on bar | Expected | Preview showed |\n|---|---|---|\n| ~25% | 0:15 | 0:15 |\n| ~50% | 0:30 | 0:30 |\n| ~95% | 0:57 | 0:57 |\n\nThe page's mousemove handler finds the pointer's position inside the bar, rounds it to the nearest second between 0 and 60, and shows it as m:ss. I didn't change any app files and closed the tab when I was done.\n\n{\"works\": true, \"cause\": \"The mousemove handler turns the pointer's offset across the 400px bar into seconds from 0 to 60 and writes m:ss to Preview, and real hovers at about 25%, 50% and 95% showed 0:15, 0:30 and 0:57 as expected.\"}",
+      "usage": {
+        "input": 22,
+        "output": 2641,
+        "cacheCreation": 18958,
+        "cacheRead": 257441
+      },
+      "costUsd": 0.3855015,
+      "durationMs": 52443,
+      "turns": 15,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The mousemove handler turns the pointer's offset across the 400px bar into seconds from 0 to 60 and writes m:ss to Preview, and real hovers at about 25%, 50% and 95% showed 0:15, 0:30 and 0:57 as expected."
+      },
+      "correct": true
+    },
+    {
+      "task": "preview",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 4,
+      "finalText": "I checked it by hovering across the Timeline bar in headless Chrome, and it works. The bar is 400px wide and starts 148px from the left edge of the page, past the spacer. Hovering at 1%, 25%, 50%, 75% and 99% of its width showed 0:01, 0:15, 0:30, 0:45 and 0:59 in the Preview text. Nothing else sits on top of the bar to block the pointer, and I didn't change any of the app's files.\n\n{\"works\": true, \"cause\": \"The hover code measures the pointer's x-position from the bar's own left edge and divides by its width, so the 120px spacer to its left doesn't throw it off, and 0:00 to 1:00 map to the left and right edges.\"}",
+      "usage": {
+        "input": 12,
+        "output": 1449,
+        "cacheCreation": 7636,
+        "cacheRead": 101057
+      },
+      "costUsd": 0.1642995,
+      "durationMs": 21204,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The hover code measures the pointer's x-position from the bar's own left edge and divides by its width, so the 120px spacer to its left doesn't throw it off, and 0:00 to 1:00 map to the left and right edges."
+      },
+      "correct": true
+    }
+  ]
+}

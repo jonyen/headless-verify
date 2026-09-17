@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "date": "2026-09-17",
+    "model": "claude-opus-5",
+    "runs": 1,
+    "seed": 87732,
+    "budgetUsd": 2,
+    "timeoutMin": 10,
+    "claudeVersion": "2.1.274 (Claude Code)"
+  },
+  "records": [
+    {
+      "task": "captions",
+      "arm": "browser",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "It works. I clicked play on the video in the Captions section, and the highlighted word followed the playhead through the whole clip.\n\n- **Playing it:** I checked every ~0.55 s. Exactly one word was highlighted each time, and it was always the right one: 0.51 s → \"zero\", 1.06 s → \"one\", 2.16 s → \"two\", 3.26 s → \"three\", 4.36 s → \"four\", 5.46 s → \"five\".\n- **Real click:** I clicked the video in the page itself and took a screenshot. The highlight moved and showed up yellow.\n- **How it works:** `app.js` creates the video and updates the highlight whenever the playback time changes or the user jumps to a new point. Only one video ends up on the page, and nothing covers it.\n\nIn the screenshot, the timer drawn into the video read 3.000 while \"two\" was still highlighted. I don't think that's a bug. The browser only sends time updates about every quarter second, and the screenshot was taken a moment after the frame. Every direct reading of the playback time matched the right word.\n\nI didn't change any of the app's files.\n\n{\"works\": true, \"cause\": \"The video updates the highlight whenever the playback time changes, and during real playback the highlighted word always matched the current second (0 = zero through 5 = five).\"}",
+      "usage": {
+        "input": 26,
+        "output": 3589,
+        "cacheCreation": 20370,
+        "cacheRead": 311984
+      },
+      "costUsd": 0.45059899999999997,
+      "durationMs": 67402,
+      "turns": 15,
+      "screenshots": 1,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The video updates the highlight whenever the playback time changes, and during real playback the highlighted word always matched the current second (0 = zero through 5 = five)."
+      },
+      "correct": true
+    },
+    {
+      "task": "captions",
+      "arm": "headless",
+      "variant": "ok",
+      "run": 0,
+      "finalText": "It works. I played the clip in headless Google Chrome and checked the page every 0.7 seconds. The highlighted word followed the playback time: \"zero\" at 0.66s, \"one\" at 1.37s, \"two\" at 2.78s, \"three\" at 3.48s and \"four\" at 4.88s. Only one word was highlighted each time, with the yellow background applied, and the page threw no errors.\n\nThe highlight can run up to about a quarter second behind a new second. In two checks it still showed the old word: \"one\" at 2.07s and \"three\" at 4.18s. That happens because the page only updates when the browser sends its regular playback-time updates, which come every 250ms or so. Seeking to a new spot updates it too.\n\nI didn't change any of the app's files; the test script was in `/tmp/capchk`.\n\n{\"works\": true, \"cause\": \"The page updates the highlight from the video's current time on each playback-time update and after each seek, and in headless Chrome the highlighted word followed playback from zero through four, only up to about a quarter second behind.\"}",
+      "usage": {
+        "input": 12,
+        "output": 1716,
+        "cacheCreation": 10127,
+        "cacheRead": 98552
+      },
+      "costUsd": 0.194573,
+      "durationMs": 28377,
+      "turns": 6,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": true,
+        "cause": "The page updates the highlight from the video's current time on each playback-time update and after each seek, and in headless Chrome the highlighted word followed playback from zero through four, only up to about a quarter second behind."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "browser",
+      "variant": "bug",
+      "run": 0,
+      "finalText": "It doesn't work. The first click on Load does nothing.\n\nThe click handler in `app.js` counts clicks and exits early on the first one (`if (clickCount === 1) return;`). \"Loaded 3 items\" only shows up on the second click. I confirmed this by firing the click from script: after one click the result was still empty, and after the second it read \"Loaded 3 items\".\n\nOne odd thing I didn't track down: the browser tool's real mouse clicks didn't reach the handler at all, and the count stayed at 0. The button isn't covered by anything, so that part may just be the tool. Either way, the early exit in the code means one click is never enough.\n\nI didn't change any app files.\n\n{\"works\": false, \"cause\": \"The Load handler in app.js ignores the first click (`if (clickCount === 1) return;`), so \\\"Loaded 3 items\\\" only appears after a second click.\"}",
+      "usage": {
+        "input": 28,
+        "output": 3571,
+        "cacheCreation": 21603,
+        "cacheRead": 355530
+      },
+      "costUsd": 0.484255,
+      "durationMs": 61536,
+      "turns": 19,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The Load handler in app.js ignores the first click (`if (clickCount === 1) return;`), so \"Loaded 3 items\" only appears after a second click."
+      },
+      "correct": true
+    },
+    {
+      "task": "load",
+      "arm": "headless",
+      "variant": "bug",
+      "run": 0,
+      "finalText": "I clicked Load once in a headless browser and the page never showed \"Loaded 3 items\". The result text stayed empty and there were no console errors.\n\nThe cause is in the page's `app.js` (lines 2–7). The click handler counts clicks and returns early on the first one (`if (clickCount === 1) return;`), so the text only appears on a second click. I didn't modify any files.\n\n{\"works\": false, \"cause\": \"The Load button's click handler in app.js ignores the first click, so 'Loaded 3 items' only appears after a second click.\"}",
+      "usage": {
+        "input": 10,
+        "output": 1026,
+        "cacheCreation": 7842,
+        "cacheRead": 82719
+      },
+      "costUsd": 0.1465245,
+      "durationMs": 46624,
+      "turns": 7,
+      "screenshots": 0,
+      "isError": false,
+      "subtype": "success",
+      "leakSuspect": false,
+      "answer": {
+        "works": false,
+        "cause": "The Load button's click handler in app.js ignores the first click, so 'Loaded 3 items' only appears after a second click."
+      },
+      "correct": true
+    }
+  ]
+}
