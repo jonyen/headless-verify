@@ -18,6 +18,7 @@ export function parseTranscript(text) {
   const calls = new Map();
   const results = [];
   const turns = [];
+  const turnByMessageId = new Map();
   let malformed = 0;
 
   for (const line of text.split('\n')) {
@@ -31,20 +32,29 @@ export function parseTranscript(text) {
     }
     const message = entry.message ?? {};
     if (entry.type === 'assistant') {
-      const u = message.usage;
-      if (u) {
-        turns.push({
-          index: turns.length,
-          usage: {
-            input: u.input_tokens ?? 0,
-            cacheCreation: u.cache_creation_input_tokens ?? 0,
-            cacheRead: u.cache_read_input_tokens ?? 0,
-            output: u.output_tokens ?? 0,
-          },
-        });
+      const messageId = message.id;
+      let turnIndex = turns.length - 1;
+      const seen = messageId != null && turnByMessageId.has(messageId);
+      if (!seen) {
+        const u = message.usage;
+        if (u) {
+          turnIndex = turns.length;
+          turns.push({
+            index: turns.length,
+            usage: {
+              input: u.input_tokens ?? 0,
+              cacheCreation: u.cache_creation_input_tokens ?? 0,
+              cacheRead: u.cache_read_input_tokens ?? 0,
+              output: u.output_tokens ?? 0,
+            },
+          });
+        }
+        if (messageId != null) turnByMessageId.set(messageId, turnIndex);
+      } else {
+        turnIndex = turnByMessageId.get(messageId);
       }
       for (const block of contentBlocks(message.content)) {
-        if (block.type === 'tool_use') calls.set(block.id, { name: block.name, turn: turns.length - 1 });
+        if (block.type === 'tool_use') calls.set(block.id, { name: block.name, turn: turnIndex });
       }
     } else if (entry.type === 'user') {
       for (const block of contentBlocks(message.content)) {

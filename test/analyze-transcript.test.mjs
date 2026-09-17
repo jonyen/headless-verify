@@ -42,6 +42,44 @@ test('parseTranscript pairs calls and results and counts malformed lines', async
   assert.equal(orphan.name, 'unknown');
 });
 
+test('repeated assistant lines with the same message.id do not double-count turns', () => {
+  const lines = [
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 0, output_tokens: 20 },
+        content: [{ type: 'text', text: 'thinking' }],
+      },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 0, output_tokens: 20 },
+        content: [{ type: 'tool_use', id: 'tA', name: 'Bash', input: {} }],
+      },
+    }),
+    JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'tA', content: 'ok' }] },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_2',
+        usage: { input_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 200, output_tokens: 10 },
+        content: [{ type: 'text', text: 'done' }],
+      },
+    }),
+  ];
+  const t = parseTranscript(lines.join('\n'));
+  assert.equal(t.turns.length, 2);
+  const result = t.results.find((r) => r.toolUseId === 'tA');
+  assert.equal(result.turn, 0);
+  assert.equal(t.turns[1].index, 1);
+});
+
 test('toolFamily groups MCP tools by server', () => {
   assert.equal(toolFamily('mcp__claude-in-chrome__computer'), 'claude-in-chrome');
   assert.equal(toolFamily('mcp__XcodeBuildMCP__build_sim'), 'mcp:XcodeBuildMCP');
