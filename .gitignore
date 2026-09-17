@@ -3,3 +3,4 @@ results/*.tmp
 .DS_Store
 .superpowers/
 bench/.runs/
+.auth.json
