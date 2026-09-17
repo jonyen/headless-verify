@@ -56,11 +56,13 @@ family, plus a calibration line comparing its estimates with the usage recorded 
 transcript. It reads local files only and never prints tool-result content.
 
 Token estimates use chars/token ratios fitted per session from the transcript's own recorded
-usage (separate ratios for tool-result text and other context text), checked on held-out turns
-with 5-fold cross-validation. Sessions with fewer than 20 usable turns fall back to a fixed
-4 chars/token; `--fixed` forces that. The output shows the method, the fitted ratios, the holdout
-error and the old fixed-ratio calibration for comparison. On the originating session the holdout
-error is 22%, above the 15% target, so treat per-family numbers as approximate; see
+usage (separate ratios for tool-result text and other context text). Turns that break the model
+are left out and counted: context resets (compaction), the turn after each, and turns with growth
+≤ 0. Accuracy is the median per-turn error on held-out turns (5-fold cross-validation); the summed
+holdout error is shown as secondary, since totals can match while single turns are far off.
+Sessions with fewer than 20 usable turns fall back to a fixed 4 chars/token; `--fixed` forces that.
+On the originating session the median per-turn error is 25%, and 1 of 25 fitted recent sessions
+is at or under the 15% target, so treat per-family numbers as approximate; see
 [docs/validation.md](docs/validation.md).
 
 ## Run the benchmark

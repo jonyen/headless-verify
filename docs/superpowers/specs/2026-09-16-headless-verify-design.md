@@ -165,16 +165,21 @@ confirmation before the full run. `--runs N` and `--tasks a,b` allow cheaper par
   content, recorded growth (context(k) − context(k−1) − output(k−1)) is modelled as tool-result
   chars / tool ratio + other context chars / context ratio + image tokens, fitted by least squares
   with non-negative coefficients. A class with fewer than 5 non-zero observations or a
-  non-positive fit is held at 4 chars/token; turns with growth ≤ 0 are dropped and counted.
-  Validation is 5-fold holdout (folds by turn index mod 5), reporting |Σ predicted − Σ recorded| /
-  Σ recorded and the median per-turn error. Sessions with fewer than 20 usable turns, or `--fixed`,
+  non-positive fit is held at 4 chars/token. (Changed 2026-09-17:) before fitting and scoring,
+  turns are excluded and counted per reason: context resets (recorded context below the previous
+  turn's, or an explicit `compact_boundary` marker), the turn after each reset, and growth ≤ 0.
+  No per-turn overhead term (tried and reverted 2026-09-17; see docs/validation.md).
+  Validation is 5-fold holdout (folds by turn index mod 5). The criterion is the median absolute
+  per-turn error on held-out turns; |Σ predicted − Σ recorded| / Σ recorded is reported as
+  secondary. Sessions with fewer than 20 usable turns, or `--fixed`,
   use 4 chars/token. The fixed-ratio calibration is still printed for comparison.
 - Computes **carry cost**: the number of later assistant turns in the session that re-read the
   result, times its size, priced at the cache-read rate. Direct size and carry cost are reported
   separately.
 - Groups by tool family (claude-in-chrome, Bash, Read, others) and reports each family's share of
   the session's billed input tokens.
-- Prints the ratio method, fitted ratios, holdout error and median per-turn error, plus the
+- Prints the ratio method, fitted ratios, median per-turn holdout error (criterion), summed
+  holdout error (secondary) and exclusion counts, plus the
   fixed-ratio estimate next to the recorded `usage` as a sanity check.
 - Output: a markdown table by default, `--json` for scripts.
 - Reads local files only and never sends data anywhere. Output contains tool names and counts,
@@ -210,10 +215,11 @@ All tests run with `node --test`, offline, spending no tokens.
 - The test suite passes offline.
 - A full benchmark run produces a results file and README table with both arms' medians, spread
   and accuracy.
-- The analyzer's fitted estimates for this project's originating session have a 5-fold holdout
-  error within 15% of the input tokens recorded in its transcript for the held-out turns (changed
-  2026-09-16 from an in-sample fixed-ratio comparison, so the criterion measures prediction on
-  turns the fit did not see rather than a constant chosen after the fact).
+- The analyzer's fitted estimates for this project's originating session have a median absolute
+  per-turn error within 15% of recorded growth on held-out turns (5-fold), with context-reset
+  turns excluded. (Changed 2026-09-17 from the summed holdout error, which an intercept term
+  showed can be near zero while single turns are 50% off. Earlier, 2026-09-16, changed from an
+  in-sample fixed-ratio comparison.) Status 2026-09-17: not met, 25.0%.
 
 ## Open questions
 

@@ -1,6 +1,128 @@
 # Validation against the spec's success criteria
 
-## Update 2026-09-16: fitted chars/token ratios with held-out validation
+## Update 2026-09-17: per-turn criterion and compaction exclusion
+
+### Reverted experiment: per-turn overhead term
+
+Commits 8468352 and 50fd9da added a fixed per-turn overhead (an intercept) to the fit:
+`recorded ≈ overhead + toolChars / toolRatio + contextChars / contextRatio + imageTokens`. It was
+reverted (the revert commit keeps both in history) because it made the headline metric look good
+without making the estimates better:
+
+| originating session | ratios only | with overhead term |
+| --- | --- | --- |
+| summed holdout error | 22.0% | 0.2% |
+| median per-turn holdout error | 23.7% | 54.2% |
+
+Across the 25 fitted sessions since 2026-09-01, the median per-session summed holdout error fell
+from 18.5% to 1.1% while the median per-session median per-turn error rose from 26.3% to 49.8%.
+7 of 25 sessions got implausible overheads (923–2,453 tokens/turn), and in 3 the overhead row came
+to more than 100% of billed input. Least squares with an intercept makes residuals sum to about
+zero, so summed error on held-out turns is small whether or not single turns are predicted well.
+
+### What changed
+
+- **Criterion:** the median absolute per-turn percentage error on held-out turns (5-fold, folds by
+  turn index mod 5). The summed holdout error |Σ predicted − Σ recorded| / Σ recorded is still
+  reported, as secondary; totals can match while single turns are far off.
+- **Exclusions, before fitting and before scoring, counted per reason:**
+  - *context drop:* a turn whose recorded context (input + cacheCreation + cacheRead) is below the
+    previous turn's, or the first turn after an explicit `compact_boundary` marker;
+  - *after drop:* the turn right after such a turn (its growth is measured from a reset base);
+  - *growth ≤ 0:* as before.
+- **Compaction signal:** found in usage (drops) and also explicitly in the transcripts: `system`
+  entries with subtype `compact_boundary` (and a following user entry flagged `isCompactSummary`).
+  Across sessions since 2026-09-01 there are 4 markers; 3 fall inside the turn range, and only 1 of
+  those 3 also shows a usage drop, so the marker adds 2 resets usage alone would miss. The
+  originating session has no marker.
+- Minimum-data rules, the fixed 4 chars/token fallback and `--fixed` are unchanged.
+
+### Originating session
+
+```
+node analyze/session-cost.mjs ~/.claude/projects/<project>/<session>.jsonl
+```
+
+| | value |
+| --- | --- |
+| method | fitted (tool, context) |
+| tool-result chars/token | 2.34 |
+| other context chars/token | 2.65 |
+| **median per-turn holdout error (criterion)** | **25.0%** |
+| summed holdout error (secondary) | 22.0% |
+| observations | 285 |
+| excluded: context drop / after drop / growth ≤ 0 | 1 / 1 / 0 |
+
+**The 15% criterion is not met** (25.0%).
+
+### All sessions since 2026-09-01
+
+```
+node analyze/session-cost.mjs --all --since 2026-09-01
+```
+
+43 sessions: 25 fitted, 18 fixed (all for fewer than 20 usable observations). 5,869 observations;
+excluded 20 context drop, 21 after drop, 8 growth ≤ 0.
+
+| # | method | tool c/t | context c/t | median per-turn | summed | obs | drop / after / ≤ 0 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | fitted | 2.55 | 2.76 | 31.0% | 13.5% | 146 | 0 / 0 / 0 |
+| 2 | fitted | 1.73 | 2.67 | 12.2% | 14.4% | 145 | 1 / 1 / 0 |
+| 3 | fitted | 2.36 | 2.66 | 31.2% | 27.6% | 536 | 1 / 1 / 1 |
+| 4 | fitted | 2.15 | 4.00 | 25.2% | 10.7% | 70 | 0 / 0 / 0 |
+| 5 | fitted | 2.92 | 0.34 | 47.5% | 14.5% | 91 | 0 / 0 / 0 |
+| 6 | fitted | 2.70 | 2.57 | 41.0% | 2480.5% | 99 | 1 / 1 / 4 |
+| 7 | fitted | 2.01 | 4.00 | 23.7% | 3.5% | 30 | 0 / 0 / 0 |
+| 8 | fitted | 2.35 | 4.00 | 36.7% | 20.5% | 37 | 0 / 0 / 0 |
+| 9 | fitted | 1.84 | 4.00 | 19.6% | 12.4% | 52 | 0 / 0 / 0 |
+| 10 | fitted | 2.34 | 2.65 | 25.0% | 22.0% | 285 | 1 / 1 / 0 |
+| 11 | fitted | 1.84 | 2.70 | 27.4% | 11.3% | 130 | 0 / 0 / 0 |
+| 12 | fitted | 2.08 | 2.31 | 29.8% | 42.9% | 1436 | 6 / 8 / 2 |
+| 13 | fitted | 1.91 | 2.80 | 28.4% | 6.9% | 364 | 1 / 1 / 0 |
+| 14 | fitted | 2.03 | 2.64 | 21.9% | 19.4% | 84 | 0 / 0 / 0 |
+| 15 | fitted | 2.29 | 2.73 | 26.3% | 20.1% | 246 | 0 / 0 / 0 |
+| 16 | fitted | 1.96 | 4.00 | 22.5% | 22.1% | 26 | 0 / 0 / 0 |
+| 17 | fitted | 2.33 | 2.58 | 31.9% | 26.9% | 836 | 6 / 5 / 1 |
+| 18 | fitted | 2.29 | 2.61 | 28.3% | 8.2% | 79 | 0 / 0 / 0 |
+| 19 | fitted | 1.92 | 4.00 | 20.4% | 5.2% | 25 | 0 / 0 / 0 |
+| 20 | fitted | 2.52 | 2.61 | 24.0% | 6.3% | 167 | 2 / 2 / 0 |
+| 21 | fitted | 2.43 | 2.93 | 17.2% | 9.7% | 28 | 0 / 0 / 0 |
+| 22 | fitted | 1.76 | 2.62 | 28.0% | 6.4% | 539 | 0 / 0 / 0 |
+| 23 | fitted | 2.22 | 2.62 | 21.0% | 13.4% | 134 | 1 / 1 / 0 |
+| 24 | fitted | 2.64 | 4.00 | 24.7% | 14.9% | 46 | 0 / 0 / 0 |
+| 25 | fitted | 2.16 | 2.47 | 35.2% | 12.1% | 101 | 0 / 0 / 0 |
+
+Fixed sessions (observations): 10, 3, 14, 5, 18, 0, 3, 19, 15, 0, 0, 5, 7, 6, 13, 0, 0, 19.
+
+- **Median of per-session median per-turn holdout error: 26.3%.**
+- **Fitted sessions at or under 15%: 1 of 25** (12.2%).
+- Median fitted ratios: tool 2.22, context 2.67 chars/token.
+- Pooled summed holdout error (secondary): 109.9%, dominated by one session (summed 2,480.5%)
+  where one training fold fitted a very different ratio and over-predicted its held-out turns.
+
+### Why per-turn error stays high
+
+Held-out turns of all 25 fitted sessions (5,732 turns, median error 28.5%), grouped by recorded
+growth:
+
+| recorded growth (tokens) | turns | share of turns | median error | share of recorded tokens | share of absolute error tokens |
+| --- | --- | --- | --- | --- | --- |
+| < 100 | 1,371 | 23.9% | 62.9% | 2.0% | 0.9% |
+| 100–500 | 2,541 | 44.3% | 25.9% | 14.1% | 2.8% |
+| 500–2,000 | 1,275 | 22.2% | 19.0% | 29.3% | 4.7% |
+| 2,000–10,000 | 514 | 9.0% | 11.0% | 38.1% | 7.2% |
+| ≥ 10,000 | 31 | 0.5% | 18.8% | 16.4% | 84.5% |
+
+Error shrinks as turns get bigger. Turns under 500 tokens are 68% of turns but 16% of tokens, and
+they set the median. At that size, content the transcript does not record as characters (message
+framing, and entry types the parser does not count, e.g. `attachment` entries; not tested) is a
+large share of each turn. A constant cannot absorb it: the overhead experiment above tried that.
+Large turns carry most of the absolute error: in one session a turn grew by about 103K tokens with
+248 characters of logged content. The ratios are close to right for the bulk of tokens (turns of
+2,000–10,000 tokens: 11.0% median). Per-turn prediction is not.
+Nothing was tuned to pass.
+
+## Update 2026-09-16: fitted chars/token ratios with held-out validation (superseded above)
 
 The analyzer no longer relies only on a fixed 4 chars/token. Per session it fits two ratios
 (tool-result text and `context:user` text) from the transcript's own recorded context growth and
