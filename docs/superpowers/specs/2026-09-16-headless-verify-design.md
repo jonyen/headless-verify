@@ -169,13 +169,15 @@ confirmation before the full run. `--runs N` and `--tasks a,b` allow cheaper par
   `attachment` entries (their rendered text; added 2026-09-17). (Changed 2026-09-17:) before
   fitting and scoring, turns are excluded and counted per reason: a context drop (recorded context
   below the previous turn's); the turn a compaction marker (`compact_boundary`, `isCompactSummary`)
-  lands on; the turn after a drop, only if its growth is negative or above 5× the session median;
-  and growth ≤ 0.
+  lands on; the turn after a drop, only if its growth is negative or above 5× the median growth of
+  the reference turns (training turns within each fold, all turns for the final fit); and growth
+  ≤ 0. A class fitted outside 1–8 chars/token is held at 4 and reported as out of range. Image
+  blocks inside attachments count as image tokens, never as text.
   No per-turn overhead term (tried and reverted 2026-09-17; see docs/validation.md).
   Validation is 5-fold holdout (folds by turn index mod 5). The criterion is the median absolute
   per-turn error on held-out turns; |Σ predicted − Σ recorded| / Σ recorded is reported as
-  secondary. Sessions with fewer than 20 usable turns, or `--fixed`,
-  use 4 chars/token. The fixed-ratio calibration is still printed for comparison.
+  secondary. Sessions with fewer than 20 usable turns use 4 chars/token; `--fixed` reproduces
+  the original fixed-ratio analyzer exactly (no attachments, no fit, no exclusions). The fixed-ratio calibration is still printed for comparison.
 - Computes **carry cost**: the number of later assistant turns in the session that re-read the
   result, times its size, priced at the cache-read rate. Direct size and carry cost are reported
   separately.
@@ -222,9 +224,11 @@ All tests run with `node --test`, offline, spending no tokens.
   per-turn error within 15% of recorded growth on held-out turns (5-fold), with context-reset
   turns excluded. (Changed 2026-09-17 from the summed holdout error, which an intercept term
   showed can be near zero while single turns are 50% off. Earlier, 2026-09-16, changed from an
-  in-sample fixed-ratio comparison.) Status 2026-09-17: met, 10.1%, after attachments were
-  counted (was 25.0%). Across 25 recent fitted sessions: median 16.1%, range 9.9–42.2%, 12 at or
-  under 15%. Per-family estimates are approximate; the benchmark uses recorded usage.
+  in-sample fixed-ratio comparison.) Status 2026-09-17 (after review fixes): met, 10.0%. Across 25
+  recent fitted sessions: median 14.4%, 13 at or under 15%, range 9.9–38.4%;
+  without the 4 out-of-range sessions: median 13.9%, 12 of 21. These are development-set
+  figures (model choices made on the same sessions); re-validate on sessions after 2026-09-17.
+  Per-family estimates are approximate; the benchmark uses recorded usage.
 
 ## Open questions
 

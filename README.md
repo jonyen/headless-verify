@@ -57,16 +57,20 @@ transcript. It reads local files only and never prints tool-result content.
 
 Token estimates use chars/token ratios fitted per session from the transcript's own recorded
 usage: one ratio for tool-result text and one for other context text, which covers user-entry text
-and the harness's attachment entries. Some turns are left out and counted: turns where recorded
-context drops, the turn a compaction marker lands on, an implausible turn right after a drop, and
-turns with growth ≤ 0. Accuracy is the median per-turn error on held-out turns (5-fold
-cross-validation). The summed holdout error is shown as secondary, since totals can match while
-single turns are far off. Sessions with fewer than 20 usable turns fall back to a fixed
-4 chars/token, and `--fixed` forces that. On the originating session the median per-turn error is
-10.1%, within the 15% target. Across 25 recent fitted sessions it ranges from 9.9% to 42.2% (median
-16.1%, 12 at or under 15%), so treat per-family numbers as approximate. The benchmark uses the
-recorded usage of each run and does not depend on these estimates; see
-[docs/validation.md](docs/validation.md).
+and the harness's attachment entries. A ratio fitted outside 1–8 chars/token is held at 4 and
+reported. Some turns are left out and counted: turns where recorded context drops, the turn a
+compaction marker lands on, an implausible turn right after a drop, and turns with growth ≤ 0.
+Accuracy is the median per-turn error on held-out turns (5-fold cross-validation). The summed
+holdout error is shown as secondary, since totals can match while single turns are far off.
+Sessions with fewer than 20 usable turns fall back to a fixed 4 chars/token. `--fixed`
+reproduces the original fixed-ratio analyzer exactly: no attachments, no fit, no exclusions. On
+the originating session the median per-turn error is 10.0%, within the 15% target. Across 25
+recent fitted sessions the median is 14.4%
+(13 at or under 15%, range 9.9–38.4%), or
+13.9% (12 of 21) without the 4 sessions with an out-of-range ratio.
+These are development-set figures, and the tool/context split is weakly identifiable, so treat
+per-family numbers as approximate. The benchmark uses the recorded usage of each run and does
+not depend on these estimates; see [docs/validation.md](docs/validation.md).
 
 ## Run the benchmark
 

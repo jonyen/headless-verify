@@ -1,6 +1,137 @@
 # Validation against the spec's success criteria
 
-## Update 2026-09-17 (2): attachments and compaction markers
+## Update 2026-09-17 (3): review fixes
+
+A review of the branch found two critical bugs and several honesty problems. These are bug fixes,
+not tuning. No other model choice changed.
+
+### Fixes
+
+1. **Base64 image data was counted as attachment text.** For attachments without a rendered form,
+   the text walk recursed into content blocks. A `queued_command` prompt held an image block with
+   about 255K characters of base64. That one entry caused the 249.8 chars/token session (summed
+   error 624.5%). It also inflated the `context:attachment` direct and carry tokens, and the
+   1,980,994 attachment characters reported in update (2). The walk now skips image and document
+   blocks and any `source` or `data` field. Image blocks count as image tokens (width × height /
+   750, or the unknown-image default). That session is now in range: 2.64 / 2.59 chars/token,
+   13.5% median per-turn error.
+2. **`--fixed` did not reproduce main.** Attachments were parsed regardless of the flag. `--fixed`
+   now skips attachment parsing, the fit and every exclusion. On the originating session its
+   family table and calibration are identical to main's analyzer (commit 7f62565, run from a
+   `git archive` copy): estimated 133,424 vs recorded 270,449 (50.7% off), implied chars/token
+   1.46. Before the fix the branch printed 36.9% off. `--all --since 2026-09-01 --fixed` also
+   matches main: 43 sessions, estimated 2,209,824 vs recorded 3,278,149 (32.6% off). A new
+   fixture with attachments and a compaction marker tests this parity.
+3. **Six tests had been deleted by mistake** in 291ae91. They are restored, adapted to the
+   `reset`/`afterDrop` fields.
+4. **Implausible ratios shipped unbounded.** A class fitted outside 1–8 chars/token now counts as
+   a failed fit: it is held at 4 and the other class is refit, as for a non-positive coefficient.
+   The class is reported in `outOfRange`. `--all` prints headline figures with and without those
+   sessions, and ratio medians use fitted classes only.
+5. **The after-drop threshold used held-out turns.** The 5× median threshold now comes from the
+   training turns inside each fold, and from all turns for the final fit. Excluding growth ≤ 0 is
+   unavoidable, because a percentage error needs a positive denominator.
+
+### Originating session
+
+| | update (2) | now |
+| --- | --- | --- |
+| tool / context chars/token | 2.41 / 2.71 | 2.41 / 2.71 |
+| **median per-turn holdout error** | 10.1% | **10.0%** |
+| summed holdout error | 5.3% | 5.2% |
+| observations (live file grew) | 290 | 301 |
+| excluded: drop / marker / after / ≤ 0 | 1 / 0 / 1 / 0 | 1 / 0 / 1 / 0 |
+| attachment chars | 133,059 | 148,140 |
+
+**15% met on the originating session: 10.0%.**
+
+### All sessions since 2026-09-01
+
+43 sessions: 25 fitted, 18 fixed (fewer than 20 usable observations). Totals: 5,892 observations.
+Excluded: 18 context drop, 2 compact marker, 11 after drop, 12 with growth ≤ 0. Attachments added
+1,729,866 characters.
+
+| | all fitted sessions | excluding 4 with an out-of-range class |
+| --- | --- | --- |
+| fitted sessions | 25 | 21 |
+| **median of per-session median per-turn error** | **14.4%** | **13.9%** |
+| sessions at or under 15% | 13 of 25 | 12 of 21 |
+| range | 9.9–38.4% | 9.9–19.8% |
+| median tool / context chars/token (fitted classes only) | 2.32 / 2.60 | 2.32 / 2.60 |
+| pooled summed holdout error (secondary) | 8.8% | 8.7% |
+
+| # | tool c/t | context c/t | out of range | median per-turn | summed | obs | drop / marker / after / ≤ 0 | attachment chars |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2.58 | 2.79 | – | 12.9% | 4.3% | 146 | 0 / 0 / 0 / 0 | 55,584 |
+| 2 | 1.78 | 2.65 | – | 13.5% | 5.9% | 145 | 1 / 0 / 1 / 0 | 50,522 |
+| 3 | 2.42 | 2.40 | – | 18.2% | 12.5% | 537 | 1 / 0 / 1 / 1 | 156,762 |
+| 4 | 2.17 | 4.00 | context | 20.2% | 9.4% | 70 | 0 / 0 / 0 / 0 | 3,697 |
+| 5 | 2.94 | 4.00 | context | 38.4% | 14.2% | 91 | 0 / 0 / 0 / 0 | 4,824 |
+| 6 | 2.78 | 2.56 | – | 18.4% | 22.1% | 99 | 1 / 0 / 0 / 5 | 31,598 |
+| 7 | 2.05 | 2.77 | – | 13.9% | 5.0% | 30 | 0 / 0 / 0 / 0 | 5,062 |
+| 8 | 2.64 | 2.59 | – | 13.5% | 0.6% | 37 | 0 / 0 / 0 / 0 | 9,740 |
+| 9 | 1.91 | 4.00 | context | 10.6% | 10.2% | 52 | 0 / 0 / 0 / 0 | 4,752 |
+| 10 | 2.41 | 2.71 | – | 10.0% | 5.2% | 301 | 1 / 0 / 1 / 0 | 148,140 |
+| 11 | 1.89 | 2.69 | – | 19.8% | 5.5% | 130 | 0 / 0 / 0 / 0 | 15,610 |
+| 12 | 2.22 | 1.91 | – | 14.4% | 18.1% | 1439 | 6 / 0 / 4 / 3 | 480,859 |
+| 13 | 1.96 | 2.70 | – | 18.0% | 2.9% | 364 | 1 / 0 / 1 / 0 | 139,202 |
+| 14 | 2.08 | 2.60 | – | 12.8% | 12.7% | 84 | 0 / 0 / 0 / 0 | 12,169 |
+| 15 | 2.32 | 2.65 | – | 9.9% | 1.7% | 246 | 0 / 0 / 0 / 0 | 104,888 |
+| 16 | 2.01 | 2.29 | – | 13.7% | 1.2% | 26 | 0 / 0 / 0 / 0 | 9,541 |
+| 17 | 2.39 | 1.98 | – | 16.1% | 7.0% | 838 | 5 / 1 / 2 / 2 | 267,865 |
+| 18 | 2.37 | 2.54 | – | 13.1% | 4.1% | 79 | 0 / 0 / 0 / 0 | 23,308 |
+| 19 | 1.95 | 2.64 | – | 16.4% | 2.7% | 25 | 0 / 0 / 0 / 0 | 2,595 |
+| 20 | 2.55 | 2.45 | – | 17.4% | 5.5% | 168 | 1 / 1 / 0 / 1 | 43,770 |
+| 21 | 2.49 | 2.94 | – | 10.4% | 11.3% | 28 | 0 / 0 / 0 / 0 | 3,791 |
+| 22 | 2.24 | 2.53 | – | 17.5% | 6.1% | 539 | 0 / 0 / 0 / 0 | 78,691 |
+| 23 | 2.32 | 2.65 | – | 13.2% | 2.9% | 134 | 1 / 0 / 1 / 0 | 35,822 |
+| 24 | 2.66 | 4.00 | context | 17.9% | 13.1% | 46 | 0 / 0 / 0 / 0 | 6,004 |
+| 25 | 2.18 | 2.32 | – | 19.3% | 4.6% | 101 | 0 / 0 / 0 / 0 | 8,764 |
+
+In 4 sessions the context class fitted out of range and was held at 4. Their median per-turn
+errors are 20.2%, 38.4%, 10.6% and 17.9%.
+
+### Caveats
+
+- **Development-set figures.** Model choices were made while watching these same sessions: the
+  attachment type list, the metadata field list, the after-drop rule and the marker exclusion. No
+  untouched sessions were held back, so the errors above are optimistic. Re-validate on sessions
+  created after 2026-09-17 before relying on them.
+- **The tool/context split is weakly identifiable.** Attachments arrive on every turn: context
+  characters are non-zero on 5,766 of 5,766 usable observations in fitted sessions. The context
+  term therefore partly acts as an intercept, the same failure as the reverted overhead experiment
+  (update 1 below). The implausible context ratios in update (2) (0.4–1.0 chars/token) came from
+  this and from the base64 bug, not from "the fallback being approximate" as update (2) said.
+  Totals are better determined than the split between tool and context families.
+- **The fallback text path undercounts** compared with `rendered` text on the same entries
+  (fallback chars ÷ rendered chars): total_tokens_reminder 0.57, session_context 0.64,
+  environment 0.73, queued_command 0.57, date 0.12, silent_turn_reminder 0.72,
+  hook_additional_context 0.79, diagnostics 0.70, auto_mode 0.01, remote_session_change 0.00,
+  bash_output_audience_note 0.00. Most other types are 0.91–1.01.
+- **Attachments not counted** (no rendered form and not in the list), entry counts:
+  batching_reminder_sent 820, task_reminder 92, command_permissions 64, prompt_snapshot 54,
+  deferred_tools_record 36, date_change 17, ultra_effort_enter 15, file 7, ultra_effort_exit 4,
+  compact_file_reference 3, nested_memory 2, workflow_keyword_request 1. Some of these may be
+  visible to the model: task_reminder, nested_memory and file look like content. Older entries of
+  counted types that have no text fields are also not counted, for example hook_success 45 and
+  bash_output_audience_note 49.
+- **Carry for `context:attachment`** counts every later turn in the session, including turns after
+  a compaction that removed the attachment. Its carry tokens are an upper bound.
+- **Fold instability.** Refitting on each fold's training turns: in session 5 the tool ratio spans
+  1.79–3.63 chars/token across folds; in session 6 the context ratio spans 1.01–2.59; in session 25
+  it spans 1.33–2.40. In sessions 4, 9 and 24 context is out of range in all 5 folds, and in
+  session 5 in 4 of 5.
+
+### Conclusion
+
+The spec's criterion is met on the originating session (10.0%). Across recent fitted sessions the
+median is 14.4% (13 of 25 at or under 15%), or 13.9% (12 of 21) without out-of-range sessions.
+Per-session median per-turn error ranges from 9.9% to 38.4%. These are development-set
+figures, and the tool/context split is weakly identifiable. The analyzer's estimates are
+approximate. The benchmark uses the usage recorded in each of its runs and does not depend on
+them.
+
+## Update 2026-09-17 (2): attachments and compaction markers (superseded above; see corrections there)
 
 This is the last change to the analyzer's model. Tuning stops here whatever the result.
 
@@ -93,9 +224,10 @@ added 1,980,994 characters.
   100–500 17.1%, 500–2,000 11.5%, 2,000–10,000 11.5%, 10,000 or more 16.6%. Small turns are no
   longer the outlier. Most of their unexplained growth was attachment text.
 - Some context ratios are implausible: 0.4, 0.7, 0.8 and 1.0 chars/token in four sessions, and
-  249.8 in one (summed error 624.5%, median per-turn 36.4%). In these sessions the context
-  bucket probably still miscounts attachment content (the fallback for entries without a
-  rendered form is approximate). The fixed-ratio calibration line reports implied chars/token as
+  249.8 in one (summed error 624.5%, median per-turn 36.4%). **Correction (update 3):** the 249.8
+  came from base64 image data counted as text, which also inflated the attachment-character totals
+  in this section. The low ratios reflect the context term acting as a quasi-intercept. Neither is
+  explained by "the fallback being approximate". The fixed-ratio calibration line reports implied chars/token as
   n/a because almost no turn now has tool results as its only arriving content.
 
 ### Conclusion
