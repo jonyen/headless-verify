@@ -39,6 +39,19 @@ export function costBreakdown({ results, turns }, { ratios = FIXED_RATIOS } = {}
     byFamily.set(family, row);
   }
 
+  // Per-turn overhead (analyze/fit.mjs): an estimate of harness tokens with no characters in the
+  // transcript. Never attributed to a tool family. Applies to each turn that received content,
+  // and is re-read by every later turn like any other result.
+  const overheadPerTurn = ratios.overheadTokensPerTurn ?? 0;
+  const overhead = { tokensPerTurn: overheadPerTurn, turns: 0, directTokens: 0, carryTokens: 0 };
+  const arrivingTurns = new Set(results.map((r) => r.turn + 1));
+  for (const t of turns) {
+    if (t.index < 1 || !arrivingTurns.has(t.index)) continue;
+    overhead.turns += 1;
+    overhead.directTokens += overheadPerTurn;
+    overhead.carryTokens += overheadPerTurn * turns.filter((later) => later.index > t.index).length;
+  }
+
   const billedInput = turns.reduce((sum, t) => sum + context(t.usage), 0);
   const families = [...byFamily.values()]
     .map((f) => ({ ...f, shareOfInput: billedInput ? (f.directTokens + f.carryTokens) / billedInput : 0 }))
@@ -76,6 +89,7 @@ export function costBreakdown({ results, turns }, { ratios = FIXED_RATIOS } = {}
 
   return {
     families,
+    overhead,
     totals: {
       billedInput,
       direct: families.reduce((s, f) => s + f.directTokens, 0),

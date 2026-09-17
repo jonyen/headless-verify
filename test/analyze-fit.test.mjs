@@ -16,14 +16,14 @@ function rng(seed) {
   };
 }
 
-function synthetic({ n = 100, tool = 1.5, context = 3.5, noise = 0.03, contextEvery = 2, seed = 7 } = {}) {
+function synthetic({ n = 100, tool = 1.5, context = 3.5, overhead = 0, noise = 0.03, contextEvery = 2, seed = 7 } = {}) {
   const r = rng(seed);
   const obs = [];
   for (let turn = 1; turn <= n; turn++) {
     const toolChars = Math.round(200 + r() * 20000);
     const contextChars = turn % contextEvery === 0 ? Math.round(100 + r() * 8000) : 0;
     const imageTokens = turn % 7 === 0 ? 1600 : 0;
-    const exact = toolChars / tool + contextChars / context + imageTokens;
+    const exact = overhead + toolChars / tool + contextChars / context + imageTokens;
     const recorded = Math.round(exact * (1 + (r() * 2 - 1) * noise));
     obs.push({ turn, recorded, toolChars, contextChars, imageTokens });
   }
@@ -41,6 +41,57 @@ test('fitRatios recovers known tool and context ratios within 5% with low holdou
   assert.equal(fit.dropped, 0);
   assert.ok(fit.holdoutErrorPct < 3, `holdout ${fit.holdoutErrorPct}`);
   assert.ok(fit.medianTurnErrorPct < 5, `median ${fit.medianTurnErrorPct}`);
+});
+
+test('fitRatios recovers a known per-turn overhead and both ratios within 5%', () => {
+  const fit = fitRatios(synthetic({ overhead: 250, noise: 0.01 }));
+  assert.equal(fit.method, 'fitted');
+  assert.ok(within(fit.overheadTokensPerTurn, 250, 5), `overhead ${fit.overheadTokensPerTurn}`);
+  assert.ok(within(fit.toolCharsPerToken, 1.5, 5), `tool ${fit.toolCharsPerToken}`);
+  assert.ok(within(fit.contextCharsPerToken, 3.5, 5), `context ${fit.contextCharsPerToken}`);
+  assert.ok(fit.holdoutErrorPct < 3, `holdout ${fit.holdoutErrorPct}`);
+});
+
+test('data with no overhead fits an overhead near zero, never negative', () => {
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const fit = fitRatios(synthetic({ seed }));
+    assert.ok(fit.overheadTokensPerTurn >= 0, `seed ${seed}: ${fit.overheadTokensPerTurn}`);
+    assert.ok(fit.overheadTokensPerTurn < 100, `seed ${seed}: ${fit.overheadTokensPerTurn}`);
+    assert.ok(within(fit.toolCharsPerToken, 1.5, 5), `seed ${seed}: tool ${fit.toolCharsPerToken}`);
+  }
+});
+
+test('overhead that would fit negative is clamped to zero and the ratios refit', () => {
+  // Every turn is 300 tokens short of the char-based estimate: an unclamped intercept is -300.
+  const obs = synthetic({ noise: 0 }).map((o) => ({ ...o, recorded: o.recorded - 300 }));
+  const fit = fitRatios(obs);
+  assert.equal(fit.method, 'fitted');
+  assert.equal(fit.overheadTokensPerTurn, 0);
+  assert.ok(fit.toolCharsPerToken > 0 && fit.contextCharsPerToken > 0);
+});
+
+test('fixed method reports zero overhead', () => {
+  assert.equal(fitRatios(synthetic({ n: 10 })).overheadTokensPerTurn, 0);
+});
+
+test('costBreakdown reports per-turn overhead as its own row, not in any family', () => {
+  const turns = [0, 1, 2, 3].map((index) => ({ index, usage: { input: 0, cacheCreation: 0, cacheRead: 0, output: 0 } }));
+  const results = [
+    { name: 'Bash', turn: 0, textChars: 300, images: [] },
+    { name: 'Bash', turn: 1, textChars: 300, images: [] },
+  ];
+  const ratios = { toolCharsPerToken: 3, contextCharsPerToken: 4, overheadTokensPerTurn: 50 };
+  const b = costBreakdown({ results, turns }, { ratios });
+  const bash = b.families.find((f) => f.family === 'Bash');
+  assert.equal(bash.directTokens, 200);
+  assert.equal(b.families.length, 1);
+  // Observation turns 1 and 2 each receive 50 overhead tokens; turn 1's is re-read by turns 2 and 3,
+  // turn 2's by turn 3.
+  assert.deepEqual(
+    { turns: b.overhead.turns, directTokens: b.overhead.directTokens, carryTokens: b.overhead.carryTokens },
+    { turns: 2, directTokens: 100, carryTokens: 150 },
+  );
+  assert.equal(costBreakdown({ results, turns }).overhead.directTokens, 0);
 });
 
 test('a class with too little data stays fixed at 4 chars/token', () => {
@@ -134,4 +185,13 @@ test('CLI reports the ratio method and never prints tool-result text', async () 
   const { stdout: out } = await run(fixture, '--json');
   assert.doesNotMatch(out, /yyyy|xxxx|orphan/);
   assert.equal(JSON.parse(out).ratios.observations, 2);
+});
+
+test('CLI reports overhead per turn in the ratios and an overhead block in JSON', async () => {
+  const { stdout } = await run(fixture, '--json');
+  const data = JSON.parse(stdout);
+  assert.equal(data.ratios.overheadTokensPerTurn, 0);
+  assert.deepEqual(data.overhead, { turns: 2, directTokens: 0, carryTokens: 0 });
+  const { stdout: md } = await run(fixture);
+  assert.match(md, /overhead 0 tokens\/turn/);
 });
